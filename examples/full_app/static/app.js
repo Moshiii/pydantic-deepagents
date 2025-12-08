@@ -152,10 +152,18 @@ function createMessageContainer(type) {
     messageEl.className = `message ${type}`;
     messageEl.id = id;
 
-    const label = type === 'user' ? 'You' : type === 'assistant' ? 'Agent' : 'System';
+    const labelMap = {
+        'user': {text: 'You', icon: 'icon-user'},
+        'assistant': {text: 'Deep Agent', icon: 'icon-ai'},
+        'system': {text: 'System', icon: 'icon-system'}
+    };
+
+    const info = labelMap[type] || labelMap['system'];
 
     messageEl.innerHTML = `
-        <span class="message-label">${label}</span>
+        <div class="message-header ${info.icon}">
+            <span>${info.text}</span>
+        </div>
         <div class="message-tools"></div>
         <div class="message-content"></div>
     `;
@@ -169,13 +177,14 @@ function createMessageContainer(type) {
 function updateStatus(status) {
     if (!currentMessageEl) return;
 
-    let statusEl = currentMessageEl.querySelector('.message-status');
+    let statusEl = currentMessageEl.querySelector('.message-status-line');
     if (!statusEl) {
         statusEl = document.createElement('div');
-        statusEl.className = 'message-status';
-        currentMessageEl.insertBefore(statusEl, currentMessageEl.querySelector('.message-content'));
+        statusEl.className = 'message-status-line';
+        statusEl.style.cssText = "font-size: 11px; color: #666; font-family: monospace; margin-top: 4px; padding-left: 1rem;";
+        currentMessageEl.appendChild(statusEl);
     }
-    statusEl.textContent = status;
+    statusEl.textContent = `> ${status}`;
 }
 
 // Streaming tool args accumulator
@@ -193,11 +202,11 @@ function startToolCallStreaming(toolName, toolCallId) {
     const toolEl = document.createElement('div');
     toolEl.className = 'tool-call streaming';
     toolEl.dataset.toolCallId = toolCallId || '';
+
     toolEl.innerHTML = `
         <div class="tool-header">
-            <span class="tool-icon">&#9881;</span>
-            <span class="tool-name">${escapeHtml(toolName)}</span>
-            <span class="tool-status streaming">streaming args...</span>
+            <span class="tool-name">./${escapeHtml(toolName)}</span>
+            <span class="tool-status streaming">STREAMING</span>
         </div>
         <div class="tool-args streaming-args"><code></code></div>
         <div class="tool-output"></div>
@@ -205,7 +214,6 @@ function startToolCallStreaming(toolName, toolCallId) {
 
     toolsEl.appendChild(toolEl);
     currentToolsEl = toolEl;
-
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
@@ -251,9 +259,8 @@ function addToolEvent(toolName, args) {
     toolEl.className = 'tool-call';
     toolEl.innerHTML = `
         <div class="tool-header">
-            <span class="tool-icon">&#9881;</span>
-            <span class="tool-name">${escapeHtml(toolName)}</span>
-            <span class="tool-status running">running</span>
+            <span class="tool-name">./${escapeHtml(toolName)}</span>
+            <span class="tool-status running">RUNNING...</span>
         </div>
         <div class="tool-args">${formatToolArgs(args)}</div>
         <div class="tool-output"></div>
@@ -261,7 +268,6 @@ function addToolEvent(toolName, args) {
 
     toolsEl.appendChild(toolEl);
     currentToolsEl = toolEl;
-
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
@@ -433,7 +439,7 @@ function handleApprovalResponse(approved) {
     }
 
     // Send approval response via WebSocket
-    ws.send(JSON.stringify({ approval: approvalResponse }));
+    ws.send(JSON.stringify({approval: approvalResponse}));
 }
 
 function setupEventListeners() {
@@ -506,7 +512,7 @@ function sendMessage() {
     sendBtn.disabled = true;
 
     // Send via WebSocket with session_id
-    const payload = { message };
+    const payload = {message};
     if (sessionId) {
         payload.session_id = sessionId;
     }
@@ -680,7 +686,7 @@ async function resetAgent() {
 
     try {
         if (sessionId) {
-            await fetch(`/reset?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' });
+            await fetch(`/reset?session_id=${encodeURIComponent(sessionId)}`, {method: 'POST'});
         }
         // Clear session ID - will get a new one on reconnect
         sessionId = null;
