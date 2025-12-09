@@ -918,6 +918,98 @@ async def health():
     }
 
 
+@app.get("/preview/{session_id}/{filepath:path}")
+async def preview_file(session_id: str, filepath: str):
+    """Serve raw files from container for live preview.
+
+    This endpoint serves files WITHOUT line numbers, with proper Content-Type,
+    allowing HTML files to load relative CSS/JS/images naturally.
+
+    Example: /preview/abc123/workspace/index.html
+             -> loads HTML, which requests style.css
+             -> browser resolves to /preview/abc123/workspace/style.css
+    """
+    from fastapi.responses import Response
+
+    if session_id not in user_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = user_sessions[session_id]
+
+    # Ensure path starts with /
+    if not filepath.startswith("/"):
+        filepath = "/" + filepath
+
+    logger.debug(f"Preview file: {filepath} for session {session_id}")
+
+    # Get file extension for content type
+    ext = filepath.split(".")[-1].lower() if "." in filepath else ""
+    content_types = {
+        # Web
+        "html": "text/html; charset=utf-8",
+        "htm": "text/html; charset=utf-8",
+        "css": "text/css; charset=utf-8",
+        "js": "application/javascript; charset=utf-8",
+        "mjs": "application/javascript; charset=utf-8",
+        "json": "application/json; charset=utf-8",
+        # Images
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "svg": "image/svg+xml",
+        "webp": "image/webp",
+        "ico": "image/x-icon",
+        # Fonts
+        "woff": "font/woff",
+        "woff2": "font/woff2",
+        "ttf": "font/ttf",
+        "eot": "application/vnd.ms-fontobject",
+        # Other
+        "pdf": "application/pdf",
+        "xml": "application/xml",
+        "txt": "text/plain; charset=utf-8",
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+
+    # Check if binary file
+    binary_extensions = {"png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "woff", "woff2", "ttf", "eot"}
+    is_binary = ext in binary_extensions
+
+    try:
+        if hasattr(session.deps.backend, "execute"):
+            if is_binary:
+                # Read binary file via base64
+                result = session.deps.backend.execute(f'base64 "{filepath}"')
+                if result.exit_code != 0:
+                    raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
+
+                import base64
+
+                b64_output = result.output.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                padding_needed = len(b64_output) % 4
+                if padding_needed:
+                    b64_output += "=" * (4 - padding_needed)
+
+                binary_content = base64.b64decode(b64_output)
+                return Response(content=binary_content, media_type=content_type)
+            else:
+                # Read text file - use cat WITHOUT -n (no line numbers)
+                result = session.deps.backend.execute(f'cat "{filepath}"')
+                if result.exit_code != 0:
+                    raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
+
+                return Response(content=result.output, media_type=content_type)
+        else:
+            raise HTTPException(status_code=500, detail="Backend does not support file serving")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error serving preview file: {filepath}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 if __name__ == "__main__":
     import uvicorn
 

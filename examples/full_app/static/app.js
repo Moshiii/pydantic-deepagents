@@ -885,9 +885,10 @@ async function openFilePreview(filePath) {
 
         const data = await response.json();
         currentPreviewPath = filePath;
-        currentPreviewContent = data.content;
+        // Strip line numbers from content (backend returns cat -n format)
+        currentPreviewContent = stripLineNumbers(data.content);
 
-        renderPreview(filename, data.content);
+        renderPreview(filename, currentPreviewContent);
 
     } catch (error) {
         console.error('Error loading file:', error);
@@ -989,6 +990,8 @@ function renderPreview(filename, content) {
 
 /**
  * Render live preview of HTML/SVG in an iframe
+ * Uses /preview endpoint to serve files directly from container,
+ * allowing relative CSS/JS/images to resolve naturally.
  */
 function renderLivePreview(content, ext) {
     const iframe = document.createElement('iframe');
@@ -998,11 +1001,9 @@ function renderLivePreview(content, ext) {
     previewContainer.innerHTML = '';
     previewContainer.appendChild(iframe);
 
-    // Write content to iframe
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-
     if (ext === 'svg') {
-        // Wrap SVG in a basic HTML document with centered display
+        // SVG: write directly with wrapper (no external resources needed)
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         iframeDoc.open();
         iframeDoc.write(`
             <!DOCTYPE html>
@@ -1028,11 +1029,27 @@ function renderLivePreview(content, ext) {
         `);
         iframeDoc.close();
     } else {
-        // HTML - render as-is
-        iframeDoc.open();
-        iframeDoc.write(content);
-        iframeDoc.close();
+        // HTML: load via /preview endpoint so relative paths work
+        // e.g., /preview/{session_id}/workspace/index.html
+        // When HTML requests style.css, browser resolves to /preview/{session_id}/workspace/style.css
+        const previewUrl = `/preview/${sessionId}${currentPreviewPath}`;
+        iframe.src = previewUrl;
     }
+}
+
+/**
+ * Strip line numbers from cat -n formatted content
+ * Format is: "     1\tline content\n     2\tnext line\n"
+ */
+function stripLineNumbers(content) {
+    if (!content) return content;
+
+    // Split into lines, strip line number prefix from each, rejoin
+    return content.split('\n').map(line => {
+        // Match: optional spaces, digits, tab, then the actual content
+        const match = line.match(/^\s*\d+\t(.*)$/);
+        return match ? match[1] : line;
+    }).join('\n');
 }
 
 /**

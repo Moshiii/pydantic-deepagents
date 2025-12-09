@@ -1,7 +1,7 @@
 [project]
-name = "pydantic-deep"
-version = "0.2.2"
-description = "Deep agent framework built on pydantic-ai with planning, filesystem, and subagent capabilities"
+name = "pydantic-deepagents"
+version = "0.2.3"
+description = "Deep Agent framework built on Pydantic-ai with planning, filesystem, and subagent capabilities"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -42,9 +42,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vstorm-co/pydantic-deep"
-Documentation = "https://github.com/vstorm-co/pydantic-deep"
-Repository = "https://github.com/vstorm-co/pydantic-deep"
+Homepage = "https://github.com/vstorm-co/pydantic-deepagents"
+Documentation = "https://github.com/vstorm-co/pydantic-deepagents"
+Repository = "https://github.com/vstorm-co/pydantic-deepagents"
 
 [build-system]
 requires = ["hatchling"]
