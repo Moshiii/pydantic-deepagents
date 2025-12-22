@@ -142,7 +142,7 @@ class DeepAgentDeps:
             size=len(content),
             line_count=line_count,
             mime_type=mimetypes.guess_type(name)[0],
-            encoding="utf-8" if is_text else "binary",
+            encoding=encoding if is_text and encoding else "binary",
         )
 
         return path

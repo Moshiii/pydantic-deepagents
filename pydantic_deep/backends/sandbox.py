@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import shlex
 import tarfile
 import time
@@ -12,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import chardet
-import PyPDF2
+import pypdf
 
 from pydantic_deep.types import (
     EditResult,
@@ -609,7 +610,7 @@ class DockerSandbox(BaseSandbox):  # pragma: no cover
     def _extract_pdf_text(self, file_bytes: bytes) -> str:
         try:
             pdf_file = BytesIO(file_bytes)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            pdf_reader = pypdf.PdfReader(pdf_file)
 
             if len(pdf_reader.pages) == 0:
                 raise ValueError("PDF contains no pages")
@@ -658,7 +659,6 @@ class DockerSandbox(BaseSandbox):  # pragma: no cover
         Returns:
             Cleaned text
         """
-        import re
 
         # Remove excessive whitespace while preserving paragraph breaks
         text = re.sub(r" +", " ", text)  # Multiple spaces to single space
@@ -697,7 +697,8 @@ class DockerSandbox(BaseSandbox):  # pragma: no cover
             filename = posix_path.name
 
             # Ensure parent directory exists
-            mkdir_result = self.execute(f"mkdir -p {parent_dir}")
+            safe_parent_dir = shlex.quote(parent_dir)
+            mkdir_result = self.execute(f"mkdir -p {safe_parent_dir}")
             if mkdir_result.exit_code != 0:
                 return WriteResult(error=f"Failed to create directory: {mkdir_result.output}")
 
