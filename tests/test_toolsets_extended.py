@@ -1,5 +1,7 @@
 """Extended tests for toolset implementations to reach 100% coverage."""
 
+from pydantic_ai_todo import TodoItem
+
 from pydantic_deep.backends.state import StateBackend
 from pydantic_deep.deps import DeepAgentDeps
 from pydantic_deep.toolsets.filesystem import (
@@ -9,7 +11,6 @@ from pydantic_deep.toolsets.subagents import (
     create_subagent_toolset,
     get_subagent_system_prompt,
 )
-from pydantic_deep.toolsets.todo import TodoItem
 from pydantic_deep.types import SubAgentConfig
 
 

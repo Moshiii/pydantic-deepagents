@@ -7,6 +7,7 @@ from typing import Literal, TypedDict, TypeVar
 
 from pydantic import BaseModel
 from pydantic_ai.output import OutputSpec
+from pydantic_ai_todo import Todo as Todo
 from typing_extensions import NotRequired
 
 # Re-export OutputSpec from pydantic-ai for structured output support
@@ -66,14 +67,6 @@ class GrepMatch(TypedDict):
     path: str
     line_number: int
     line: str
-
-
-class Todo(BaseModel):
-    """A todo item for task tracking."""
-
-    content: str
-    status: Literal["pending", "in_progress", "completed"]
-    active_form: str  # Present continuous form (e.g., "Implementing feature X")
 
 
 class SubAgentConfig(TypedDict):

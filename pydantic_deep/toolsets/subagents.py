@@ -122,8 +122,9 @@ def create_subagent_toolset(
             subagent = ctx.deps.subagents[subagent_type]
         else:
             # Create the subagent on-the-fly
+            from pydantic_ai_todo import create_todo_toolset
+
             from pydantic_deep.toolsets.filesystem import create_filesystem_toolset
-            from pydantic_deep.toolsets.todo import create_todo_toolset
 
             model = config.get("model", default_model)
             tools = config.get("tools", [])
