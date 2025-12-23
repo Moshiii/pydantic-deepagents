@@ -2,30 +2,48 @@
 
 ## TodoToolset
 
-Task planning and tracking tools.
+Task planning and tracking tools. Provided by [pydantic-ai-todo](https://github.com/vstorm-co/pydantic-ai-todo).
 
 ### Tools
 
 | Tool | Description |
 |------|-------------|
+| `read_todos` | Read the current todo list state |
 | `write_todos` | Update the todo list |
 
 ### Factory
 
 ```python
+from pydantic_ai_todo import create_todo_toolset
+
 def create_todo_toolset(
+    storage: TodoStorageProtocol | None = None,
     *,
-    id: str = "todo",
-) -> TodoToolset
+    id: str | None = None,
+) -> FunctionToolset[Any]
 ```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `storage` | `TodoStorageProtocol \| None` | `None` | Storage backend (defaults to in-memory) |
+| `id` | `str \| None` | `None` | Optional unique ID for the toolset |
+
+### Tool: read_todos
+
+```python
+async def read_todos() -> str
+```
+
+Read the current todo list state.
+
+**Returns:** Formatted list of todos with status icons and summary.
 
 ### Tool: write_todos
 
 ```python
-async def write_todos(
-    ctx: RunContext[DeepAgentDeps],
-    todos: list[dict],
-) -> str
+async def write_todos(todos: list[TodoItem]) -> str
 ```
 
 Update the todo list with new items.
@@ -34,7 +52,7 @@ Update the todo list with new items.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `todos` | `list[dict]` | List of todo items |
+| `todos` | `list[TodoItem]` | List of todo items |
 
 Each todo item:
 ```python
@@ -45,15 +63,48 @@ Each todo item:
 }
 ```
 
-**Returns:** Confirmation message.
+**Returns:** Confirmation message with status counts.
+
+### Types
+
+```python
+from pydantic_ai_todo import Todo, TodoItem, TodoStorage, TodoStorageProtocol
+
+class Todo(BaseModel):
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
+    active_form: str
+
+class TodoStorage:
+    """Default in-memory storage."""
+    todos: list[Todo]
+```
 
 ### System Prompt
 
 ```python
-def get_todo_system_prompt(deps: DeepAgentDeps) -> str
+from pydantic_ai_todo import get_todo_system_prompt
+
+def get_todo_system_prompt(storage: TodoStorageProtocol | None = None) -> str
 ```
 
 Generates dynamic system prompt showing current todos.
+
+### Standalone Usage
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai_todo import create_todo_toolset, TodoStorage
+
+# Simple usage
+agent = Agent("openai:gpt-4.1", toolsets=[create_todo_toolset()])
+
+# With storage access
+storage = TodoStorage()
+agent = Agent("openai:gpt-4.1", toolsets=[create_todo_toolset(storage)])
+result = await agent.run("Create 3 tasks")
+print(storage.todos)  # Access todos directly
+```
 
 ---
 

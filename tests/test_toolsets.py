@@ -7,8 +7,8 @@ from pydantic_deep.toolsets.filesystem import (
     create_filesystem_toolset,
     get_filesystem_system_prompt,
 )
-from pydantic_deep.toolsets.todo import create_todo_toolset, get_todo_system_prompt
 from pydantic_deep.types import RuntimeConfig, Todo
+from pydantic_ai_todo import create_todo_toolset, get_todo_system_prompt
 
 
 class TestTodoToolset:

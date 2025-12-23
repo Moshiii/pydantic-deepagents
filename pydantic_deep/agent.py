@@ -20,8 +20,8 @@ from pydantic_deep.toolsets.filesystem import (
 )
 from pydantic_deep.toolsets.skills import create_skills_toolset, get_skills_system_prompt
 from pydantic_deep.toolsets.subagents import create_subagent_toolset, get_subagent_system_prompt
-from pydantic_deep.toolsets.todo import create_todo_toolset, get_todo_system_prompt
 from pydantic_deep.types import Skill, SkillDirectory, SubAgentConfig
+from pydantic_ai_todo import create_todo_toolset, get_todo_system_prompt
 
 if TYPE_CHECKING:
     from pydantic_ai.toolsets import AbstractToolset

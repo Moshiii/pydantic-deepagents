@@ -68,12 +68,8 @@ class GrepMatch(TypedDict):
     line: str
 
 
-class Todo(BaseModel):
-    """A todo item for task tracking."""
-
-    content: str
-    status: Literal["pending", "in_progress", "completed"]
-    active_form: str  # Present continuous form (e.g., "Implementing feature X")
+# Re-export Todo from pydantic-ai-todo for backwards compatibility
+from pydantic_ai_todo import Todo
 
 
 class SubAgentConfig(TypedDict):

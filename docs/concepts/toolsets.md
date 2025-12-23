@@ -6,10 +6,11 @@ Toolsets are collections of tools that extend agent capabilities. pydantic-deep 
 
 ### TodoToolset
 
-Task planning and tracking.
+Task planning and tracking. Powered by [pydantic-ai-todo](https://github.com/vstorm-co/pydantic-ai-todo).
 
 | Tool | Description |
 |------|-------------|
+| `read_todos` | Read the current todo list state |
 | `write_todos` | Update the todo list with tasks and statuses |
 
 ```python
@@ -25,6 +26,17 @@ write_todos(todos=[
 - `pending` - Not started
 - `in_progress` - Currently working
 - `completed` - Done
+
+!!! tip "Standalone Usage"
+    The todo toolset can also be used independently with any pydantic-ai agent:
+
+    ```python
+    from pydantic_ai import Agent
+    from pydantic_ai_todo import create_todo_toolset, TodoStorage
+
+    storage = TodoStorage()
+    agent = Agent("openai:gpt-4.1", toolsets=[create_todo_toolset(storage)])
+    ```
 
 ### FilesystemToolset
 
