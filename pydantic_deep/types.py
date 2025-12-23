@@ -7,6 +7,7 @@ from typing import Literal, TypedDict, TypeVar
 
 from pydantic import BaseModel
 from pydantic_ai.output import OutputSpec
+from pydantic_ai_todo import Todo as Todo
 from typing_extensions import NotRequired
 
 # Re-export OutputSpec from pydantic-ai for structured output support
@@ -66,10 +67,6 @@ class GrepMatch(TypedDict):
     path: str
     line_number: int
     line: str
-
-
-# Re-export Todo from pydantic-ai-todo for backwards compatibility
-from pydantic_ai_todo import Todo
 
 
 class SubAgentConfig(TypedDict):
