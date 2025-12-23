@@ -96,6 +96,23 @@ class FilesystemBackend:
 
         return sorted(results, key=lambda x: (not x["is_dir"], x["name"]))
 
+    def _read_bytes(self, path: str) -> bytes:
+        """Read raw bytes from a file."""
+        error = _validate_path(path, self._root)
+        if error:  # pragma: no cover
+            return b""
+
+        full_path = self._resolve_path(path)
+
+        if not full_path.exists() or not full_path.is_file():
+            return b""
+
+        try:
+            with open(full_path, "rb") as f:
+                return f.read()
+        except (PermissionError, OSError):  # pragma: no cover
+            return b""
+
     def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:
         """Read file content with line numbers."""
         error = _validate_path(path, self._root)

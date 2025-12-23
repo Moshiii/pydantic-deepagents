@@ -30,6 +30,17 @@ class BackendProtocol(Protocol):
         """
         ...
 
+    def _read_bytes(self, path: str) -> bytes:
+        """Read raw bytes from a file.
+
+        Args:
+            path: File path to read.
+
+        Returns:
+            File content as bytes.
+        """
+        ...
+
     def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:
         """Read file content.
 

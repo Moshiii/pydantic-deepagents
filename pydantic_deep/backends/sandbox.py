@@ -65,6 +65,7 @@ class BaseSandbox(ABC):
 
     def ls_info(self, path: str) -> list[FileInfo]:  # pragma: no cover
         """List files using ls command."""
+        path = shlex.quote(path)
         result = self.execute(f"ls -la {path}")
         if result.exit_code != 0:
             return []
@@ -97,6 +98,16 @@ class BaseSandbox(ABC):
 
         return sorted(entries, key=lambda x: (not x["is_dir"], x["name"]))
 
+    def _read_bytes(self, path: str) -> bytes:  # pragma: no cover
+        """Read raw bytes from file using cat command."""
+        path = shlex.quote(path)
+        result = self.execute(f"cat {path}")
+
+        if result.exit_code != 0:
+            return f"[Error: {result.output}]".encode()
+
+        return result.output.encode("utf-8", errors="replace")
+
     def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:  # pragma: no cover
         """Read file using cat command with line numbers."""
         # Use sed to handle offset and limit
@@ -122,9 +133,13 @@ class BaseSandbox(ABC):
         # Use a unique delimiter
         delimiter = f"EOF_{uuid.uuid4().hex[:8]}"
 
-        result = self.execute(
-            f"mkdir -p $(dirname {path}) && cat > {path} << '{delimiter}'\n{escaped}\n{delimiter}"
+        quoted_path = shlex.quote(path)
+        command = (
+            f"mkdir -p $(dirname {quoted_path}) && cat > {quoted_path} << '{delimiter}'\n"
+            f"{escaped}\n"
+            f"{delimiter}"
         )
+        result = self.execute(command)
 
         if result.exit_code != 0:
             return WriteResult(error=result.output)
@@ -136,6 +151,7 @@ class BaseSandbox(ABC):
     ) -> EditResult:
         """Edit file using sed."""
         # First check if file exists and count occurrences
+        path = shlex.quote(path)
         check = self.execute(f"grep -c '{old_string}' {path}")
 
         if check.exit_code != 0:
@@ -161,7 +177,6 @@ class BaseSandbox(ABC):
         old_escaped = old_string.replace("/", "\\/").replace("&", "\\&")
         new_escaped = new_string.replace("/", "\\/").replace("&", "\\&")
 
-        path = shlex.quote(path)
         if replace_all:
             result = self.execute(f"sed -i 's/{old_escaped}/{new_escaped}/g' {path}")
         else:
@@ -175,6 +190,7 @@ class BaseSandbox(ABC):
     def glob_info(self, pattern: str, path: str = "/") -> list[FileInfo]:  # pragma: no cover
         """Find files using find command."""
         # Convert glob to find pattern
+        path = shlex.quote(path)
         result = self.execute(f"find {path} -name '{pattern}' -type f 2>/dev/null")
 
         if result.exit_code != 0:
@@ -203,6 +219,7 @@ class BaseSandbox(ABC):
         """Search using grep command."""
         search_path = path or "/"
 
+        search_path = shlex.quote(search_path)
         if glob:
             cmd = f"grep -rn '{pattern}' {search_path} --include='{glob}'"
         else:
@@ -488,6 +505,42 @@ class DockerSandbox(BaseSandbox):  # pragma: no cover
                 truncated=False,
             )
 
+    def _read_bytes(self, path: str) -> bytes:
+        """Read raw bytes from file in container.
+
+        Args:
+            path: Path to the file in the container.
+
+        Returns:
+            File content as bytes.
+        """
+        self._ensure_container()
+        assert self._container is not None
+
+        try:
+            # Use Docker get_archive to read file
+            stream, stat = self._container.get_archive(path)
+            raw_tar_bytes = b"".join(stream)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read file: {e}") from e
+
+        # Extract file from tar archive
+        with (
+            io.BytesIO(raw_tar_bytes) as tar_buffer,
+            tarfile.open(fileobj=tar_buffer, mode="r") as tar,
+        ):
+            member = next((m for m in tar.getmembers() if m.isfile()), None)
+
+            if not member:
+                return f"[Error: Path '{path}' exists but is empty or not a file.]".encode()
+
+            f = tar.extractfile(member)
+            if f is None:
+                return b"[Error: Could not extract file stream from archive]"
+
+            file_bytes = f.read()
+            return file_bytes
+
     def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:
         """
         Read file from container using Docker get_archive API.
@@ -497,30 +550,9 @@ class DockerSandbox(BaseSandbox):  # pragma: no cover
             offset: Start character index (for pagination).
             limit: Maximum characters to return.
         """
-        self._ensure_container()
-        assert self._container is not None
-
         try:
-            stream, stat = self._container.get_archive(path)
-
-            # Reassemble the tar byte stream into memory
-            raw_tar_bytes = b"".join(stream)
-
-            # Extract the file content
-            with (
-                io.BytesIO(raw_tar_bytes) as tar_buffer,
-                tarfile.open(fileobj=tar_buffer, mode="r") as tar,
-            ):
-                member = next((m for m in tar.getmembers() if m.isfile()), None)
-
-                if not member:
-                    return f"[Error: Path '{path}' exists but is empty or not a file.]"
-
-                f = tar.extractfile(member)
-                if f is None:
-                    return "[Error: Could not extract file stream from archive]"
-
-                file_bytes = f.read()
+            # Read raw bytes from file
+            file_bytes = self._read_bytes(path)
 
             # Convert bytes to string
             file_ext = Path(path).suffix.lower().lstrip(".")

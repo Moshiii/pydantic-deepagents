@@ -111,6 +111,27 @@ class StateBackend:
 
         return sorted(entries.values(), key=lambda x: (not x["is_dir"], x["name"]))
 
+    def _read_bytes(self, path: str) -> bytes:
+        """Read raw bytes from a file.
+
+        Args:
+            path: File path to read.
+
+        Returns:
+            File content as bytes.
+        """
+        error = _validate_path(path)
+        if error:  # pragma: no cover
+            return f"Error: {error}".encode()
+
+        path = _normalize_path(path)
+
+        if path not in self._files:
+            return b""
+
+        content = "\n".join(self._files[path]["content"])
+        return content.encode("utf-8", errors="replace")  # pragma: no cover
+
     def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:
         """Read file content with line numbers."""
         error = _validate_path(path)
