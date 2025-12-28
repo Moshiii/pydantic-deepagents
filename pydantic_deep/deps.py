@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import chardet
-
 from pydantic_ai_backends import BackendProtocol, StateBackend
+
 from pydantic_deep.types import FileData, Todo, UploadedFile
 
 if TYPE_CHECKING:

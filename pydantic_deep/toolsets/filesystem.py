@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets import FunctionToolset
-
 from pydantic_ai_backends import GrepMatch, SandboxProtocol
 
 from pydantic_deep.deps import DeepAgentDeps

@@ -1,6 +1,7 @@
 """Extended tests for skills toolset to reach 100% coverage."""
 
 from pydantic_ai_backends import StateBackend
+
 from pydantic_deep.deps import DeepAgentDeps
 from pydantic_deep.toolsets.skills import (
     create_skills_toolset,
