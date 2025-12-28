@@ -1,8 +1,8 @@
 """Extended tests for toolset implementations to reach 100% coverage."""
 
+from pydantic_ai_backends import StateBackend
 from pydantic_ai_todo import TodoItem
 
-from pydantic_deep.backends.state import StateBackend
 from pydantic_deep.deps import DeepAgentDeps
 from pydantic_deep.toolsets.filesystem import (
     get_filesystem_system_prompt,
@@ -40,10 +40,10 @@ class TestFilesystemToolsetExtended:
 
     def test_get_filesystem_system_prompt_with_sandbox(self):
         """Test filesystem system prompt with sandbox backend."""
-        from pydantic_deep.backends.protocol import SandboxProtocol
+        from pydantic_ai_backends import SandboxProtocol
 
         # Create a mock sandbox backend
-        class MockSandbox(SandboxProtocol):
+        class MockSandbox(SandboxProtocol):  # type: ignore[misc]
             def execute(self, command, timeout=None):
                 pass
 

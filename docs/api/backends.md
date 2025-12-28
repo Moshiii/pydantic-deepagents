@@ -1,5 +1,8 @@
 # Backends API
 
+!!! info "Standalone Library"
+    These backends are also available as [`pydantic-ai-backend`](https://github.com/vstorm-co/pydantic-ai-backend) for use with any pydantic-ai agent.
+
 ## Protocols
 
 ### BackendProtocol
@@ -277,7 +280,7 @@ Stop and remove the container.
 ### Example
 
 ```python
-from pydantic_deep.backends.sandbox import DockerSandbox
+from pydantic_deep import DockerSandbox
 
 sandbox = DockerSandbox(
     image="python:3.12-slim",

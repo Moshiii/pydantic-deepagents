@@ -4,9 +4,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from pydantic_ai_backends import FilesystemBackend, StateBackend
 
-from pydantic_deep.backends.filesystem import FilesystemBackend
-from pydantic_deep.backends.state import StateBackend
 from pydantic_deep.deps import DeepAgentDeps
 
 

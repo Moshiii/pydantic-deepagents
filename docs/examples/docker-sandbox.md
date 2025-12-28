@@ -1,5 +1,11 @@
 # Docker Sandbox Example
 
+!!! tip "Standalone Usage"
+    DockerSandbox is also available in [`pydantic-ai-backend`](https://github.com/vstorm-co/pydantic-ai-backend) for use with any pydantic-ai agent:
+    ```bash
+    pip install pydantic-ai-backend[docker]
+    ```
+
 This example demonstrates isolated code execution using DockerSandbox.
 
 ## Source Code
@@ -37,8 +43,7 @@ DockerSandbox provides:
 
 import asyncio
 
-from pydantic_deep import create_deep_agent, DeepAgentDeps
-from pydantic_deep.backends.sandbox import DockerSandbox
+from pydantic_deep import DockerSandbox, DeepAgentDeps, create_deep_agent
 
 
 async def main():
@@ -237,7 +242,7 @@ finally:
 For development/testing without Docker:
 
 ```python
-from pydantic_deep.backends.sandbox import LocalSandbox
+from pydantic_deep import LocalSandbox
 
 # Executes on local machine (DANGEROUS in production!)
 sandbox = LocalSandbox(work_dir="/tmp/workspace")
