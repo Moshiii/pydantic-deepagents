@@ -55,6 +55,16 @@ from pydantic_deep import (
     create_deep_agent,
 )
 from pydantic_deep.types import SubAgentConfig
+from pydantic_ai_backends import StateBackend, FilesystemBackend
+from dotenv import load_dotenv
+
+# Try to import DockerException, but it's optional
+try:
+    from docker.errors import DockerException
+except ImportError:
+    DockerException = Exception  # Fallback if docker package not installed
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -88,6 +98,7 @@ class UserSession:
 agent: Agent[DeepAgentDeps, str] | None = None
 session_manager: SessionManager | None = None
 user_sessions: dict[str, UserSession] = {}  # session_id -> UserSession
+docker_available: bool = False  # Track if Docker is available
 
 
 # Subagent configurations
@@ -233,18 +244,35 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
 
 
 async def get_or_create_session(session_id: str) -> UserSession:
-    """Get existing session or create a new one with isolated Docker container."""
-    global session_manager, user_sessions
+    """Get existing session or create a new one with isolated Docker container or fallback backend."""
+    global session_manager, user_sessions, docker_available
 
     if session_id in user_sessions:
         return user_sessions[session_id]
 
-    # Create new sandbox via SessionManager
-    assert session_manager is not None
-    sandbox = await session_manager.get_or_create(session_id)
+    # Try to use Docker sandbox if available, otherwise fall back to FilesystemBackend
+    backend = None
+    if docker_available and session_manager is not None:
+        try:
+            sandbox = await session_manager.get_or_create(session_id)
+            backend = sandbox
+            logger.info(f"Created Docker sandbox for session: {session_id}")
+        except (DockerException, FileNotFoundError, ConnectionError) as e:
+            logger.warning(f"Docker not available, falling back to FilesystemBackend: {e}")
+            docker_available = False
+            # Create per-session workspace directory
+            session_workspace = WORKSPACE_DIR / session_id
+            session_workspace.mkdir(parents=True, exist_ok=True)
+            backend = FilesystemBackend(str(session_workspace))
+    else:
+        # Docker not available, use FilesystemBackend
+        session_workspace = WORKSPACE_DIR / session_id
+        session_workspace.mkdir(parents=True, exist_ok=True)
+        backend = FilesystemBackend(str(session_workspace))
+        logger.info(f"Using FilesystemBackend for session: {session_id}")
 
-    # Create deps with the user's sandbox
-    deps = DeepAgentDeps(backend=sandbox)
+    # Create deps with the backend
+    deps = DeepAgentDeps(backend=backend)
 
     # Create and store session
     session = UserSession(session_id=session_id, deps=deps)
@@ -257,26 +285,44 @@ async def get_or_create_session(session_id: str) -> UserSession:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize shared agent and session manager on startup."""
-    global agent, session_manager
+    global agent, session_manager, docker_available
 
     # Create shared agent (stateless)
     agent = create_agent()
 
-    # Create session manager for per-user Docker containers
-    session_manager = SessionManager(
-        default_runtime=None,  # Will use default python:3.12-slim
-        default_idle_timeout=3600,  # 1 hour idle timeout
-    )
-    session_manager.start_cleanup_loop(interval=300)  # Cleanup every 5 min
-
-    print("Agent initialized (shared across sessions)")
-    print(f"Skills directory: {SKILLS_DIR}")
-    print("Session manager started with auto-cleanup")
+    # Try to initialize Docker session manager
+    try:
+        import docker
+        # Test Docker connection
+        docker_client = docker.from_env()
+        docker_client.ping()
+        docker_available = True
+        
+        # Create session manager for per-user Docker containers
+        session_manager = SessionManager(
+            default_runtime=None,  # Will use default python:3.12-slim
+            default_idle_timeout=3600,  # 1 hour idle timeout
+        )
+        session_manager.start_cleanup_loop(interval=300)  # Cleanup every 5 min
+        print("Agent initialized (shared across sessions)")
+        print(f"Skills directory: {SKILLS_DIR}")
+        print("Session manager started with auto-cleanup (Docker enabled)")
+    except (DockerException, FileNotFoundError, ConnectionError, ImportError) as e:
+        docker_available = False
+        session_manager = None
+        print("Agent initialized (shared across sessions)")
+        print(f"Skills directory: {SKILLS_DIR}")
+        print(f"⚠️  Docker not available: {e}")
+        print("⚠️  Using FilesystemBackend fallback (code execution disabled)")
+    
     yield
 
-    # Shutdown all sessions
-    count = await session_manager.shutdown()
-    print(f"Shutdown complete. Stopped {count} sessions.")
+    # Shutdown all sessions if Docker was available
+    if session_manager is not None:
+        count = await session_manager.shutdown()
+        print(f"Shutdown complete. Stopped {count} sessions.")
+    else:
+        print("Shutdown complete.")
 
 
 # Create FastAPI app
