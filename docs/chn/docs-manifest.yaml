@@ -1,0 +1,316 @@
+features:
+  - name: 深度代理工厂
+    entry_points:
+      - python_api: create_deep_agent()
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py::TestCreateDeepAgent
+    config:
+      - include_todo
+      - include_filesystem
+      - include_subagents
+      - include_skills
+      - include_execute
+      - interrupt_on
+      - output_type
+      - history_processors
+    docs:
+      - features.md#deep-agent-factory
+      - architecture.md#core-agent-factory
+      - diagrams.md#component-diagram
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 默认依赖工厂
+    entry_points:
+      - python_api: create_default_deps()
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py::TestCreateDefaultDeps
+    config: []
+    docs:
+      - features.md#default-dependencies-factory
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 文件上传辅助
+    entry_points:
+      - python_api: run_with_files()
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py::TestRunWithFiles
+    config:
+      - upload_dir
+    docs:
+      - features.md#file-upload-helper
+      - usage.md#file-uploads
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: DeepAgentDeps 容器
+    entry_points:
+      - python_api: DeepAgentDeps
+    source_files:
+      - pydantic_deep/deps.py
+    tests:
+      - tests/test_agent.py::TestDeepAgentDeps
+    config: []
+    docs:
+      - features.md#deepagentdeps-container
+      - architecture.md#dependency-injection-container
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 文件上传跟踪
+    entry_points:
+      - python_api: deps.upload_file()
+    source_files:
+      - pydantic_deep/deps.py
+    tests:
+      - tests/test_agent.py::TestFileUploads
+    config:
+      - upload_dir
+    docs:
+      - features.md#file-upload-tracking
+      - usage.md#file-uploads
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: Todo 工具集
+    entry_points:
+      - python_api: 通过 include_todo=True 包含
+      - tools: write_todos(), read_todos()
+    source_files:
+      - External: pydantic-ai-todo
+      - Integration: pydantic_deep/agent.py
+    tests:
+      - tests/test_toolsets.py
+    config:
+      - include_todo
+    docs:
+      - features.md#todo-toolset
+      - architecture.md#filesystem-toolset
+    confidence:
+      level: High
+      basis: external package tests + integration
+
+  - name: 文件系统工具集
+    entry_points:
+      - python_api: 通过 include_filesystem=True 包含
+      - tools: ls(), read_file(), write_file(), edit_file(), glob(), grep(), execute()
+    source_files:
+      - pydantic_deep/toolsets/filesystem.py
+    tests:
+      - tests/test_toolsets.py::TestFilesystemToolset
+    config:
+      - include_filesystem
+      - include_execute
+      - require_write_approval
+      - require_execute_approval
+    docs:
+      - features.md#filesystem-toolset
+      - architecture.md#filesystem-toolset
+      - diagrams.md#agent-execution-sequence
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 子代理工具集
+    entry_points:
+      - python_api: 通过 include_subagents=True 包含
+      - tool: task(description, subagent_type)
+    source_files:
+      - pydantic_deep/toolsets/subagents.py
+    tests:
+      - tests/test_toolsets.py::TestSubAgentToolset
+    config:
+      - include_subagents
+      - include_general_purpose_subagent
+      - subagents
+    docs:
+      - features.md#subagent-toolset
+      - architecture.md#subagent-toolset
+      - diagrams.md#subagent-delegation-sequence
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 技能工具集
+    entry_points:
+      - python_api: 通过 include_skills=True 包含
+      - tools: list_skills(), load_skill(), read_skill_resource()
+    source_files:
+      - pydantic_deep/toolsets/skills.py
+    tests:
+      - tests/test_skills.py
+    config:
+      - include_skills
+      - skill_directories
+      - skills
+    docs:
+      - features.md#skills-toolset
+      - architecture.md#skills-toolset
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 摘要处理器
+    entry_points:
+      - python_api: create_summarization_processor() 或 SummarizationProcessor
+    source_files:
+      - pydantic_deep/processors/summarization.py
+    tests:
+      - tests/test_processors.py
+    config:
+      - trigger
+      - keep
+      - max_input_tokens
+      - token_counter
+      - summary_prompt
+    docs:
+      - features.md#summarization-processor
+      - architecture.md#summarization-processor
+      - diagrams.md#summarization-flow
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: StateBackend
+    entry_points:
+      - python_api: 来自 pydantic_ai_backends 的 StateBackend()
+    source_files:
+      - External: pydantic-ai-backend
+    tests:
+      - External package tests
+    config: []
+    docs:
+      - features.md#statebackend
+      - architecture.md#backend-abstraction
+    confidence:
+      level: High
+      basis: external package implementation
+
+  - name: FilesystemBackend
+    entry_points:
+      - python_api: 来自 pydantic_ai_backends 的 FilesystemBackend(path)
+    source_files:
+      - External: pydantic-ai-backend
+    tests:
+      - External package tests
+    config:
+      - path
+    docs:
+      - features.md#filesystembackend
+      - architecture.md#backend-abstraction
+    confidence:
+      level: High
+      basis: external package implementation
+
+  - name: DockerSandbox
+    entry_points:
+      - python_api: 来自 pydantic_ai_backends 的 DockerSandbox()
+    source_files:
+      - External: pydantic-ai-backend
+    tests:
+      - External package tests
+    config:
+      - runtime
+      - default_runtime
+    docs:
+      - features.md#dockersandbox
+      - architecture.md#backend-abstraction
+    confidence:
+      level: High
+      basis: external package implementation
+
+  - name: SessionManager
+    entry_points:
+      - python_api: 来自 pydantic_ai_backends 的 SessionManager()
+    source_files:
+      - External: pydantic-ai-backend
+    tests:
+      - External package tests
+    config:
+      - default_runtime
+      - default_idle_timeout
+    docs:
+      - features.md#sessionmanager
+      - architecture.md#runtime-topology
+      - diagrams.md#multi-user-application-topology
+    confidence:
+      level: High
+      basis: external package implementation
+
+  - name: 类型安全输出
+    entry_points:
+      - python_api: create_deep_agent(output_type=Model)
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py
+    config:
+      - output_type
+    docs:
+      - features.md#type-safe-output
+      - usage.md#structured-output
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 工具审批工作流
+    entry_points:
+      - python_api: create_deep_agent(interrupt_on={"execute": True})
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py::TestCreateDeepAgent::test_create_with_interrupt_on
+    config:
+      - interrupt_on
+    docs:
+      - features.md#tool-approval-workflow
+      - usage.md#human-in-the-loop
+    confidence:
+      level: High
+      basis: tests + implementation
+
+  - name: 上下文感知指令
+    entry_points:
+      - python_api: 通过 @agent.instructions 装饰器自动
+    source_files:
+      - pydantic_deep/agent.py
+    tests:
+      - tests/test_agent.py 中的集成测试
+    config: []
+    docs:
+      - features.md#context-aware-instructions
+      - architecture.md#dynamic-system-prompts
+    confidence:
+      level: Medium
+      basis: implementation
+
+  - name: 完整应用示例
+    entry_points:
+      - cli: cd examples/full_app && uvicorn app:app --reload --port 8080
+      - web_ui: http://localhost:8080
+    source_files:
+      - examples/full_app/app.py
+      - examples/full_app/github_tools.py
+      - examples/full_app/static/*
+    tests: []
+    config:
+      - 环境变量（API 密钥）
+      - Docker 可用性（自动检测）
+    docs:
+      - features.md#full-app-example
+      - examples/full_app/README.md
+    confidence:
+      level: High
+      basis: implementation
