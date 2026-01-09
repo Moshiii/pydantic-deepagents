@@ -9,6 +9,7 @@ This example demonstrates all pydantic-deep features:
 - Subagents (joke generator - unrelated to main task)
 - File uploads (PDF/CSV)
 - Multi-user support with SessionManager
+- Long-term memory system (Markdown-based, persistent across sessions)
 
 Run with:
     cd examples/full_app
@@ -32,6 +33,16 @@ from fastapi.staticfiles import StaticFiles
 
 # Import our custom GitHub tools
 from github_tools import GITHUB_SYSTEM_PROMPT, create_github_toolset
+
+# Import memory system
+try:
+    from memory_system import create_memory_toolset
+    from memory_system.core import MemorySystem
+    MEMORY_SYSTEM_AVAILABLE = True
+except ImportError:
+    # Fallback if memory_system is not available
+    MEMORY_SYSTEM_AVAILABLE = False
+    logger.warning("Memory system not available. Install or check memory_system module.")
 from pydantic_ai import (
     FinalResultEvent,
     PartDeltaEvent,
@@ -79,9 +90,12 @@ APP_DIR = Path(__file__).parent
 WORKSPACE_DIR = APP_DIR / "workspace"
 SKILLS_DIR = APP_DIR / "skills"
 STATIC_DIR = APP_DIR / "static"
+MEMORY_DIR = APP_DIR / "memories"
+MEMORY_TEMPLATE = APP_DIR / "memory_template.md"
 
 # Create workspace if it doesn't exist
 WORKSPACE_DIR.mkdir(exist_ok=True)
+MEMORY_DIR.mkdir(exist_ok=True)
 
 
 @dataclass
@@ -136,6 +150,7 @@ MAIN_INSTRUCTIONS = """You are a powerful AI assistant with multiple capabilitie
 3. **Code Execution**: You can execute Python code in a Docker sandbox
 4. **Data Analysis**: Load the 'data-analysis' skill for comprehensive CSV analysis
 5. **Entertainment**: Delegate to the 'joke-generator' subagent for humor
+6. **Memory System**: Remember user preferences, todos, habits, and important information across conversations
 
 ## Task Management with TODO List
 
@@ -193,12 +208,31 @@ When you encounter an error:
 3. Retry the operation
 4. Continue with the task
 
+## Memory System
+
+You have access to a long-term memory system that persists across conversations:
+
+- **read_memory(section)**: Read user's memory (basic_info, preferences, todos, habits, memories, goals)
+- **update_preference(category, key, value)**: Update user preferences
+- **add_todo(content, priority, due_date)**: Add a todo item
+- **complete_todo(content)**: Mark a todo as completed
+- **add_memory(topic, summary)**: Record important conversation memories
+- **learn_habit(habit, category)**: Learn user habits (工作习惯, 沟通习惯, 生活习惯)
+
+**When to use memory:**
+- When user asks about their preferences, todos, or habits → use `read_memory`
+- When user expresses preferences or habits → use `update_preference` or `learn_habit`
+- When user mentions tasks → use `add_todo`
+- After important conversations → use `add_memory` to save key points
+- Always personalize responses based on remembered information
+
 ## Guidelines
 
 - When asked to analyze data, first load the 'data-analysis' skill for best practices
 - When asked for jokes or entertainment, delegate to the 'joke-generator' subagent
 - For GitHub queries, use the appropriate github_* tools
 - For code execution, write the code to a file first, then execute it
+- Use the memory system to provide personalized, context-aware responses
 - Briefly explain what you're doing, but don't over-explain
 
 ## File Locations
@@ -215,6 +249,22 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
     """Create the shared agent (stateless - can be used by all sessions)."""
     # Create the GitHub toolset
     github_toolset = create_github_toolset(id="github")
+    
+    # Create toolsets list
+    toolsets = [github_toolset]
+    
+    # Create the memory toolset if available
+    if MEMORY_SYSTEM_AVAILABLE:
+        try:
+            memory_toolset = create_memory_toolset(
+                memory_dir=str(MEMORY_DIR),
+                template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None,
+                id="memory"
+            )
+            toolsets.append(memory_toolset)
+            logger.info("Memory system toolset added to agent")
+        except Exception as e:
+            logger.warning(f"Failed to create memory toolset: {e}")
 
     # Create the main agent with all features
     # Include DeferredToolRequests as output type for human-in-the-loop
@@ -229,7 +279,7 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
         include_subagents=True,
         include_skills=True,
         include_execute=True,  # Force include execute - backend is provided via deps at runtime
-        toolsets=[github_toolset],
+        toolsets=toolsets,  # Include memory toolset if available
         # Subagents
         subagents=SUBAGENT_CONFIGS,
         include_general_purpose_subagent=False,  # We only want our custom subagent
@@ -494,6 +544,19 @@ async def run_agent_with_streaming(
     # Update session's message history for next request
     session.message_history = result.all_messages()
     logger.info(f"Updated message history to {len(session.message_history)} messages")
+
+    # Update memory system statistics (optional)
+    if MEMORY_SYSTEM_AVAILABLE:
+        try:
+            memory_sys = MemorySystem(
+                user_id=session.session_id,
+                memory_dir=str(MEMORY_DIR),
+                template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None
+            )
+            memory_sys.increment_conversation_count()
+            logger.debug(f"Updated memory statistics for session: {session.session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update memory statistics: {e}")
 
     # Send final response
     logger.info(f"Sending response: {str(result.output)[:200]}...")
