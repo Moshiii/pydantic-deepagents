@@ -34,15 +34,14 @@ from fastapi.staticfiles import StaticFiles
 # Import our custom GitHub tools
 from github_tools import GITHUB_SYSTEM_PROMPT, create_github_toolset
 
-# Import memory system
+# NOTE: memory_system is a local module under examples/full_app/memory_system
+# It is deliberately designed to be low-dependency and portable.
 try:
     from memory_system import create_memory_toolset
     from memory_system.core import MemorySystem
     MEMORY_SYSTEM_AVAILABLE = True
-except ImportError:
-    # Fallback if memory_system is not available
+except ImportError:  # pragma: no cover - dev-time warning only
     MEMORY_SYSTEM_AVAILABLE = False
-    logger.warning("Memory system not available. Install or check memory_system module.")
 from pydantic_ai import (
     FinalResultEvent,
     PartDeltaEvent,
@@ -92,6 +91,10 @@ SKILLS_DIR = APP_DIR / "skills"
 STATIC_DIR = APP_DIR / "static"
 MEMORY_DIR = APP_DIR / "memories"
 MEMORY_TEMPLATE = APP_DIR / "memory_template.md"
+
+# Personal Companion AI: Fixed user ID (not session-based)
+# All memories are stored for this single user identity
+PERSONAL_USER_ID = "owner"
 
 # Create workspace if it doesn't exist
 WORKSPACE_DIR.mkdir(exist_ok=True)
@@ -249,21 +252,23 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
     """Create the shared agent (stateless - can be used by all sessions)."""
     # Create the GitHub toolset
     github_toolset = create_github_toolset(id="github")
-    
+
     # Create toolsets list
     toolsets = [github_toolset]
-    
+
     # Create the memory toolset if available
+    # Use fixed PERSONAL_USER_ID for personal companion AI (not session-based)
     if MEMORY_SYSTEM_AVAILABLE:
         try:
             memory_toolset = create_memory_toolset(
                 memory_dir=str(MEMORY_DIR),
                 template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None,
-                id="memory"
+                id="memory",
+                fixed_user_id=PERSONAL_USER_ID,  # Fixed user ID for personal companion
             )
             toolsets.append(memory_toolset)
-            logger.info("Memory system toolset added to agent")
-        except Exception as e:
+            logger.info("Memory system toolset added to agent (user_id='owner')")
+        except Exception as e:  # pragma: no cover - defensive logging
             logger.warning(f"Failed to create memory toolset: {e}")
 
     # Create the main agent with all features
@@ -279,7 +284,7 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
         include_subagents=True,
         include_skills=True,
         include_execute=True,  # Force include execute - backend is provided via deps at runtime
-        toolsets=toolsets,  # Include memory toolset if available
+        toolsets=toolsets,
         # Subagents
         subagents=SUBAGENT_CONFIGS,
         include_general_purpose_subagent=False,  # We only want our custom subagent
@@ -546,15 +551,16 @@ async def run_agent_with_streaming(
     logger.info(f"Updated message history to {len(session.message_history)} messages")
 
     # Update memory system statistics (optional)
+    # Use fixed PERSONAL_USER_ID for personal companion AI (not session-based)
     if MEMORY_SYSTEM_AVAILABLE:
         try:
             memory_sys = MemorySystem(
-                user_id=session.session_id,
+                user_id=PERSONAL_USER_ID,  # Fixed user ID for personal companion
                 memory_dir=str(MEMORY_DIR),
                 template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None
             )
             memory_sys.increment_conversation_count()
-            logger.debug(f"Updated memory statistics for session: {session.session_id}")
+            logger.debug("Updated memory statistics for owner")
         except Exception as e:
             logger.warning(f"Failed to update memory statistics: {e}")
 

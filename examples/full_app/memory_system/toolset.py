@@ -77,6 +77,7 @@ def create_memory_toolset(
     memory_dir: str = "./memories",
     template_path: Optional[str] = None,
     id: str | None = "memory",
+    fixed_user_id: Optional[str] = None,
 ) -> FunctionToolset[DepsType]:
     """创建记忆系统工具集
     
@@ -91,27 +92,40 @@ def create_memory_toolset(
     toolset: FunctionToolset[DepsType] = FunctionToolset(id=id)
     
     def get_user_id(ctx: RunContext[DepsType]) -> str:
-        """从上下文获取 user_id"""
-        # 尝试从 deps 获取 user_id
-        if hasattr(ctx.deps, 'user_id'):
-            return getattr(ctx.deps, 'user_id')
-        
-        # 尝试从 session_id 获取（如果 deps 有 session_id 属性）
-        if hasattr(ctx.deps, 'session_id'):
-            return getattr(ctx.deps, 'session_id')
-        
-        # 尝试从 run context 的 metadata 获取
-        if hasattr(ctx, 'metadata') and isinstance(ctx.metadata, dict):
-            if 'user_id' in ctx.metadata:
-                return ctx.metadata['user_id']
-            if 'session_id' in ctx.metadata:
-                return ctx.metadata['session_id']
-        
-        # 尝试从 run context 直接获取
-        if hasattr(ctx, 'user_id'):
-            return getattr(ctx, 'user_id')
-        
-        # 默认值（在实际使用中，应该通过参数传入或从配置获取）
+        """获取 user_id
+
+        优先级：
+        1. fixed_user_id（用于单用户私人助手）
+        2. ctx.deps.user_id
+        3. ctx.deps.session_id
+        4. ctx.metadata 中的 user_id / session_id
+        5. ctx.user_id
+        6. 默认值 "default_user"
+        """
+        # 1. 固定用户 ID（用于私人陪伴型 AI）
+        if fixed_user_id:
+            return fixed_user_id
+
+        # 2. 尝试从 deps 获取 user_id
+        if hasattr(ctx.deps, "user_id"):
+            return getattr(ctx.deps, "user_id")
+
+        # 3. 尝试从 session_id 获取（如果 deps 有 session_id 属性）
+        if hasattr(ctx.deps, "session_id"):
+            return getattr(ctx.deps, "session_id")
+
+        # 4. 尝试从 run context 的 metadata 获取
+        if hasattr(ctx, "metadata") and isinstance(ctx.metadata, dict):
+            if "user_id" in ctx.metadata:
+                return ctx.metadata["user_id"]
+            if "session_id" in ctx.metadata:
+                return ctx.metadata["session_id"]
+
+        # 5. 尝试从 run context 直接获取
+        if hasattr(ctx, "user_id"):
+            return getattr(ctx, "user_id")
+
+        # 6. 默认值
         return "default_user"
     
     def get_memory_system(ctx: RunContext[DepsType]) -> MemorySystem:
@@ -141,71 +155,55 @@ def create_memory_toolset(
                 - "goals": 长期目标
         """
         memory_sys = get_memory_system(ctx)
-        memory = memory_sys.get_memory()
-        
+
+        # 全部上下文（给模型看）
         if section == "all":
             return memory_sys.get_context()
-        elif section == "basic_info":
-            if memory.basic_info:
-                result = ["## 基本信息"]
-                for key, value in memory.basic_info.items():
-                    if value:
-                        result.append(f"- {key}：{value}")
+
+        # 以下分支使用新的分类存储来读取对应文件
+        storage = memory_sys.storage  # CategorizedMemoryStorage
+
+        if section == "basic_info":
+            # 直接从 profile.md 中提取“基本信息”表格
+            profile = storage.files["profile"].read_text(encoding="utf-8") if storage.files["profile"].exists() else ""
+            import re
+            match = re.search(r"## 基本信息\n\n(.*?)(?=\n## |$)", profile, re.DOTALL)
+            if match:
+                result = ["## 基本信息", match.group(1).strip()]
                 return "\n".join(result)
             return "暂无基本信息"
-        elif section == "preferences":
-            if memory.preferences:
-                result = ["## 偏好设置"]
-                for category, items in memory.preferences.items():
-                    if items:
-                        result.append(f"### {category}")
-                        for item in items:
-                            result.append(f"  - {item}")
+
+        if section == "preferences":
+            # 返回 profile.md 中的偏好设置部分
+            profile = storage.files["profile"].read_text(encoding="utf-8") if storage.files["profile"].exists() else ""
+            import re
+            match = re.search(r"## 偏好设置\n(.*?)(?=\n---|$)", profile, re.DOTALL)
+            if match:
+                result = ["## 偏好设置", match.group(1).strip()]
                 return "\n".join(result)
             return "暂无偏好设置"
-        elif section == "todos":
-            todos = memory.todos
-            result = ["## 待办事项"]
-            if todos.get("in_progress"):
-                result.append("### 进行中")
-                for todo in todos["in_progress"]:
-                    status = "✓" if todo.get("checked") else "○"
-                    result.append(f"- {status} {todo.get('content', '')}")
-            if todos.get("pending"):
-                result.append("### 待开始")
-                for todo in todos["pending"]:
-                    result.append(f"- ○ {todo.get('content', '')}")
-            if todos.get("completed"):
-                result.append("### 已完成")
-                for todo in todos["completed"][-5:]:  # 只显示最近5个
-                    result.append(f"- ✓ {todo.get('content', '')}")
-            return "\n".join(result) if len(result) > 1 else "暂无待办事项"
-        elif section == "habits":
-            if memory.learned_habits:
-                result = ["## 学习到的习惯"]
-                for habit in memory.learned_habits:
-                    result.append(f"- [{habit['category']}] {habit['habit']}")
-                return "\n".join(result)
+
+        if section == "todos":
+            # 直接返回 todos.md 的内容
+            if storage.files["todos"].exists():
+                return storage.files["todos"].read_text(encoding="utf-8")
+            return "暂无待办事项"
+
+        if section == "habits":
+            if storage.files["habits"].exists():
+                return storage.files["habits"].read_text(encoding="utf-8")
             return "暂无学习到的习惯"
-        elif section == "memories":
-            if memory.important_memories:
-                result = ["## 重要记忆"]
-                for mem in memory.important_memories[-10:]:  # 最近10个
-                    result.append(f"### {mem['date']} - {mem['topic']}")
-                    for point in mem.get('points', [])[:3]:
-                        result.append(f"  - {point}")
-                return "\n".join(result)
+
+        if section == "memories":
+            if storage.files["conversations"].exists():
+                return storage.files["conversations"].read_text(encoding="utf-8")
             return "暂无重要记忆"
-        elif section == "goals":
-            if memory.long_term_goals:
-                result = ["## 长期目标"]
-                for goal in memory.long_term_goals:
-                    result.append(f"### {goal['name']}")
-                    result.append(f"  完成度：{goal.get('progress', 0)}%")
-                return "\n".join(result)
-            return "暂无长期目标"
-        else:
-            return f"未知的章节：{section}。可用章节：all, basic_info, preferences, todos, habits, memories, goals"
+
+        if section == "goals":
+            # 当前未单独实现 goals 文件，返回 profile 中可能的目标信息或占位
+            return "当前记忆系统未单独存储长期目标，如需请在 profile 或 diary 中记录。"
+
+        return f"未知的章节：{section}。可用章节：all, basic_info, preferences, todos, habits, memories, goals"
     
     @toolset.tool
     async def update_preference(

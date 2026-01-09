@@ -23,11 +23,13 @@
 
 from .core import MemorySystem, MemoryParser, MemoryUpdater
 from .toolset import create_memory_toolset, get_memory_system_prompt
+from .categorized_storage import CategorizedMemoryStorage
 
 __all__ = [
     "MemorySystem",
     "MemoryParser", 
     "MemoryUpdater",
+    "CategorizedMemoryStorage",
     "create_memory_toolset",
     "get_memory_system_prompt",
 ]

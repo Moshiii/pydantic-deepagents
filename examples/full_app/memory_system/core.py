@@ -679,7 +679,19 @@ class MemoryUpdater:
 
 
 class MemorySystem:
-    """记忆系统主类 - 提供高级接口"""
+    """记忆系统主类 - 提供高级接口
+    
+    支持分门别类的存储结构：
+    memories/
+      owner/
+        profile.md      # 基本信息和偏好
+        todos.md         # 待办事项
+        diary.md         # 日记
+        schedule.md      # 日程安排
+        habits.md        # 生活习惯
+        relationships.md # 人际关系
+        conversations.md # 最近对话
+    """
     
     def __init__(
         self,
@@ -689,17 +701,18 @@ class MemorySystem:
     ):
         self.user_id = user_id
         self.memory_dir = Path(memory_dir)
-        self.memory_dir.mkdir(parents=True, exist_ok=True)
         
-        self.file_path = self.memory_dir / f"memory_{user_id}.md"
+        # 使用新的分门别类存储
+        from .categorized_storage import CategorizedMemoryStorage
+        self.storage = CategorizedMemoryStorage(user_id=user_id, memory_dir=memory_dir)
+        
+        # 保留旧的接口用于兼容
         self.template_path = Path(template_path) if template_path else None
-        
-        self.parser = MemoryParser(self.file_path)
-        self.updater = MemoryUpdater(self.file_path, template_path)
     
     def get_memory(self) -> MemoryData:
-        """获取完整记忆数据"""
-        return self.parser.parse()
+        """获取完整记忆数据（兼容旧接口）"""
+        # 返回一个空的 MemoryData，因为新系统使用分门别类的存储
+        return MemoryData(user_id=self.user_id)
     
     def get_context(self, sections: Optional[List[str]] = None) -> str:
         """获取记忆上下文（用于注入系统提示）
@@ -707,78 +720,29 @@ class MemorySystem:
         Args:
             sections: 要包含的章节列表，None 表示全部
         """
-        memory = self.get_memory()
-        context_parts = []
-        
-        if sections is None or "basic_info" in sections:
-            if memory.basic_info:
-                context_parts.append("## 基本信息")
-                for key, value in memory.basic_info.items():
-                    if value:
-                        context_parts.append(f"- {key}：{value}")
-                context_parts.append("")
-        
-        if sections is None or "preferences" in sections:
-            if memory.preferences:
-                context_parts.append("## 偏好设置")
-                for category, items in memory.preferences.items():
-                    if items:
-                        context_parts.append(f"### {category}")
-                        for item in items:
-                            context_parts.append(f"  - {item}")
-                context_parts.append("")
-        
-        if sections is None or "todos" in sections:
-            todos = memory.todos.get("in_progress", [])
-            if todos:
-                context_parts.append("## 当前待办")
-                for todo in todos[:5]:  # 只显示前5个
-                    status = "✓" if todo.get("checked") else "○"
-                    context_parts.append(f"- {status} {todo.get('content', '')}")
-                context_parts.append("")
-        
-        if sections is None or "habits" in sections:
-            recent_habits = memory.learned_habits[-5:]  # 最近5个习惯
-            if recent_habits:
-                context_parts.append("## 学习到的习惯")
-                for habit in recent_habits:
-                    context_parts.append(f"- [{habit['category']}] {habit['habit']}")
-                context_parts.append("")
-        
-        if sections is None or "memories" in sections:
-            recent_memories = memory.important_memories[-3:]  # 最近3个记忆
-            if recent_memories:
-                context_parts.append("## 最近的重要记忆")
-                for mem in recent_memories:
-                    context_parts.append(f"### {mem['date']} - {mem['topic']}")
-                    for point in mem.get('points', [])[:3]:  # 只显示前3个要点
-                        context_parts.append(f"  - {point}")
-                context_parts.append("")
-        
-        return "\n".join(context_parts)
+        return self.storage.get_context(sections)
     
-    # 便捷方法
+    # 便捷方法 - 委托给新的存储系统
     def update_preference(self, category: str, key: str, value: str):
         """更新偏好"""
-        self.updater.update_preference(category, key, value)
+        self.storage.update_preference(category, key, value)
     
     def add_todo(self, content: str, priority: str = "medium", due_date: Optional[str] = None):
         """添加待办"""
-        self.updater.add_todo(content, priority, due_date)
+        self.storage.add_todo(content, priority, due_date)
     
     def complete_todo(self, content: str):
         """完成待办"""
-        self.updater.complete_todo(content)
+        self.storage.complete_todo(content)
     
     def add_memory(self, topic: str, points: List[str]):
-        """添加记忆"""
-        date = datetime.now().strftime("%Y-%m-%d")
-        self.updater.add_memory(date, topic, points)
+        """添加记忆（对话摘要）"""
+        self.storage.add_conversation(topic, points)
     
     def learn_habit(self, habit: str, category: str = "工作习惯"):
         """学习习惯"""
-        self.updater.learn_habit(habit, category)
+        self.storage.learn_habit(habit, category)
     
     def increment_conversation_count(self):
         """增加对话计数"""
-        self.updater.increment_statistic("总对话次数")
+        self.storage.increment_conversation_count()
