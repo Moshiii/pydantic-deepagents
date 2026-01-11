@@ -1,12 +1,22 @@
 """Pytest configuration and fixtures."""
 
 import tempfile
+import warnings
 from pathlib import Path
 
 import pytest
 from pydantic_ai_backends import FilesystemBackend, StateBackend
 
 from pydantic_deep.deps import DeepAgentDeps
+
+# Filter out pytest assertion rewrite warnings for modules that are already imported
+# These warnings occur when modules like anyio or logfire are imported before pytest
+# and are harmless - they just indicate that pytest cannot rewrite those modules' assertions
+warnings.filterwarnings(
+    "ignore",
+    message=".*Module already imported so cannot be rewritten.*",
+    category=Warning,
+)
 
 
 @pytest.fixture

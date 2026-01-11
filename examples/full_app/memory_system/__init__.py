@@ -21,15 +21,35 @@
     memory.learn_habit("用户喜欢在早上工作", category="工作习惯")
 """
 
-from .core import MemorySystem, MemoryParser, MemoryUpdater
+from .core import MemorySystem
+from .json_storage import JsonMemoryStorage
 from .toolset import create_memory_toolset, get_memory_system_prompt
+from .utils import (
+    calculate_remind_time,
+    format_datetime,
+    format_duration,
+    generate_id,
+    get_current_date,
+    get_current_time,
+    parse_datetime,
+    parse_duration,
+    time_overlap,
+)
 
 __all__ = [
     "MemorySystem",
-    "MemoryParser", 
-    "MemoryUpdater",
+    "JsonMemoryStorage",
     "create_memory_toolset",
     "get_memory_system_prompt",
+    "generate_id",
+    "parse_datetime",
+    "format_datetime",
+    "parse_duration",
+    "format_duration",
+    "calculate_remind_time",
+    "time_overlap",
+    "get_current_time",
+    "get_current_date",
 ]
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

@@ -11,7 +11,7 @@ from typing import Any, Optional
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
-from .core import MemorySystem, MemoryData
+from .core import MemorySystem
 
 # 尝试导入 DeepAgentDeps，如果不存在则使用 Any
 try:
@@ -29,54 +29,31 @@ MEMORY_SYSTEM_PROMPT = """
 - `read_memory`: 读取用户的记忆信息（基本信息、偏好、待办、日程等）
 - `update_preference`: 更新用户的偏好设置
 - `add_todo`: 添加待办事项到用户的记忆（一次性任务）
-- `complete_todo`: 标记待办事项为已完成
-- `remove_todo`: 删除待办事项（用于清理重复或已转为日程的待办）
+- `complete_todo`: 标记待办事项为已完成（通过内容匹配）
+- `remove_todo`: 删除待办事项（通过内容匹配）
+- `schedule_todo`: 为待办事项安排时间预算
 - `add_memory`: 记录重要的对话记忆
 - `learn_habit`: 学习用户的新习惯
 - `add_regular_schedule`: 添加重复性日程（每天、工作日、每周X等）
+- `add_one_time_event`: 添加一次性日程事件
+- `add_idea`: 记录创意想法
+- `learn_schedule_preference`: 学习用户的日程偏好
 
 使用建议：
 - 在对话开始时，使用 `read_memory` 了解用户的基本信息和偏好
-- 当用户提到偏好时，使用 `update_preference` 更新
+- 当用户提到偏好时，使用 `update_preference` 或 `learn_schedule_preference` 更新
 - 当用户提到一次性任务时，使用 `add_todo` 记录
-- 当用户提到重复性任务时，使用 `add_regular_schedule` 添加到日程，并立即使用 `remove_todo` 从待办中删除
+- 当用户提到重复性任务时，使用 `add_regular_schedule` 添加到日程
+- 当用户需要为待办安排时间时，使用 `schedule_todo`
 - 在重要对话后，使用 `add_memory` 保存关键信息
 - 当发现用户的行为模式时，使用 `learn_habit` 学习
-- **自动清理**：当任务转为日程后，自动使用 `remove_todo` 清理待办中的重复项
+- 当用户表达时间偏好时，使用 `learn_schedule_preference` 学习
 """
 
 
-def get_memory_system_prompt(memory: Optional[MemoryData] = None) -> str:
+def get_memory_system_prompt() -> str:
     """生成记忆系统的系统提示"""
-    if not memory:
-        return MEMORY_SYSTEM_PROMPT
-    
-    parts = [MEMORY_SYSTEM_PROMPT]
-    
-    # 添加当前记忆摘要
-    if memory.basic_info:
-        parts.append("\n## 当前用户信息")
-        for key, value in memory.basic_info.items():
-            if value:
-                parts.append(f"- {key}：{value}")
-    
-    if memory.preferences:
-        parts.append("\n## 用户偏好")
-        for category, items in memory.preferences.items():
-            if items:
-                parts.append(f"### {category}")
-                for item in items[:3]:  # 只显示前3个
-                    parts.append(f"  - {item}")
-    
-    todos = memory.todos.get("in_progress", [])
-    if todos:
-        parts.append("\n## 当前待办")
-        for todo in todos[:5]:
-            parts.append(f"- {todo.get('content', '')}")
-    
-    # 注意：日程信息会通过 get_context() 方法动态获取，这里不重复添加
-    
-    return "\n".join(parts)
+    return MEMORY_SYSTEM_PROMPT
 
 
 def create_memory_toolset(
@@ -308,7 +285,9 @@ def create_memory_toolset(
         ctx: RunContext[DepsType],
         content: str,
         priority: str = "medium",
-        due_date: str | None = None
+        due_date: str | None = None,
+        category: str | None = None,
+        estimated_duration: str | None = None
     ) -> str:
         """添加待办事项到用户的记忆
         
@@ -316,10 +295,12 @@ def create_memory_toolset(
             content: 待办内容
             priority: 优先级（low, medium, high）
             due_date: 截止日期（格式：YYYY-MM-DD）
+            category: 分类标签（如 "工作"、"学习"、"生活"）
+            estimated_duration: 预估时长（如 "30分钟"、"2小时"）
         """
         memory_sys = get_memory_system(ctx)
-        memory_sys.add_todo(content, priority, due_date)
-        return f"已添加待办：{content}（优先级：{priority}）"
+        todo_id = memory_sys.add_todo(content, priority, due_date, category, estimated_duration)
+        return f"已添加待办：{content}（ID: {todo_id}，优先级：{priority}）"
     
     @toolset.tool
     async def complete_todo(
@@ -329,11 +310,19 @@ def create_memory_toolset(
         """标记待办事项为已完成
         
         Args:
-            content: 待办内容（需要与添加时完全匹配）
+            content: 待办内容（通过内容匹配查找待办）
         """
         memory_sys = get_memory_system(ctx)
-        memory_sys.complete_todo(content)
-        return f"已标记完成：{content}"
+        # 先通过content查找ID
+        todo_id = memory_sys.find_todo_by_content(content)
+        if not todo_id:
+            return f"未找到待办事项：{content}"
+        
+        success = memory_sys.complete_todo(todo_id)
+        if success:
+            return f"已标记完成：{content}"
+        else:
+            return f"标记完成失败：{content}"
     
     @toolset.tool
     async def remove_todo(
@@ -343,11 +332,19 @@ def create_memory_toolset(
         """删除待办事项（用于清理重复或已转为日程的待办）
         
         Args:
-            content: 待办内容（需要与添加时完全匹配）
+            content: 待办内容（通过内容匹配查找待办）
         """
         memory_sys = get_memory_system(ctx)
-        memory_sys.remove_todo(content)
-        return f"已删除待办：{content}"
+        # 先通过content查找ID
+        todo_id = memory_sys.find_todo_by_content(content)
+        if not todo_id:
+            return f"未找到待办事项：{content}"
+        
+        success = memory_sys.remove_todo(todo_id)
+        if success:
+            return f"已删除待办：{content}"
+        else:
+            return f"删除失败：{content}"
     
     @toolset.tool
     async def add_memory(
@@ -383,12 +380,42 @@ def create_memory_toolset(
         return f"已学习习惯：{habit}（类别：{category}）"
     
     @toolset.tool
+    async def schedule_todo(
+        ctx: RunContext[DepsType],
+        content: str,
+        start_time: str,
+        duration: str,
+        reminder_minutes: int = 15
+    ) -> str:
+        """为待办事项安排时间预算
+        
+        Args:
+            content: 待办内容（通过内容匹配查找待办）
+            start_time: 开始时间（格式：YYYY-MM-DD HH:MM 或 YYYY-MM-DDTHH:MM）
+            duration: 持续时间（如 "30分钟"、"1小时"、"2小时30分钟"）
+            reminder_minutes: 提前提醒分钟数（默认 15）
+        """
+        memory_sys = get_memory_system(ctx)
+        # 先通过content查找ID
+        todo_id = memory_sys.find_todo_by_content(content)
+        if not todo_id:
+            return f"未找到待办事项：{content}"
+        
+        success = memory_sys.schedule_todo(todo_id, start_time, duration, reminder_minutes)
+        if success:
+            return f"已安排：{content}，时间：{start_time}，时长：{duration}"
+        else:
+            return f"安排失败：{content}"
+    
+    @toolset.tool
     async def add_regular_schedule(
         ctx: RunContext[DepsType],
         title: str,
         time: str,
         frequency: str,
-        description: str = ""
+        duration: str = "1小时",
+        description: str = "",
+        reminder_minutes: int = 15
     ) -> str:
         """添加重复性日程到用户的日历
         
@@ -400,11 +427,83 @@ def create_memory_toolset(
                 - "工作日"：周一至周五重复
                 - "每周一"、"每周二"等：每周特定日期重复
                 - "每月1号"等：每月特定日期重复
+            duration: 持续时间（如 "30分钟"、"1小时"）
             description: 备注说明（可选）
+            reminder_minutes: 提前提醒分钟数（默认 15）
         """
         memory_sys = get_memory_system(ctx)
-        memory_sys.add_regular_schedule(title, time, frequency, description)
-        return f"已添加重复性日程：{title}，时间：{time}，频率：{frequency}"
+        schedule_id = memory_sys.add_recurring_schedule(
+            title, time, duration, frequency, description, None, reminder_minutes
+        )
+        return f"已添加重复性日程：{title}，时间：{time}，频率：{frequency}（ID: {schedule_id}）"
+    
+    @toolset.tool
+    async def add_one_time_event(
+        ctx: RunContext[DepsType],
+        title: str,
+        start_time: str,
+        end_time: str | None = None,
+        duration: str | None = None,
+        description: str = "",
+        location: str | None = None,
+        reminder_minutes: int = 15
+    ) -> str:
+        """添加一次性日程事件
+        
+        Args:
+            title: 事件标题
+            start_time: 开始时间（格式：YYYY-MM-DD HH:MM）
+            end_time: 结束时间（格式：YYYY-MM-DD HH:MM），不设置则使用 duration
+            duration: 持续时间（与 end_time 二选一）
+            description: 事件描述
+            location: 地点
+            reminder_minutes: 提前提醒分钟数（默认 15）
+        """
+        memory_sys = get_memory_system(ctx)
+        event_id = memory_sys.add_one_time_event(
+            title, start_time, end_time, duration, description, location, reminder_minutes
+        )
+        return f"已添加一次性事件：{title}，时间：{start_time}（ID: {event_id}）"
+    
+    @toolset.tool
+    async def add_idea(
+        ctx: RunContext[DepsType],
+        content: str,
+        date: str | None = None,
+        time: str | None = None,
+        tags: list[str] | None = None,
+        category: str | None = None
+    ) -> str:
+        """记录创意想法
+        
+        Args:
+            content: 想法内容
+            date: 日期（格式：YYYY-MM-DD），默认今天
+            time: 时间（格式：HH:MM），默认当前时间
+            tags: 标签列表（如 ["工作", "产品", "技术"]）
+            category: 分类（如 "产品想法"、"技术灵感"、"生活感悟"）
+        """
+        memory_sys = get_memory_system(ctx)
+        idea_id = memory_sys.add_idea(content, date, time, tags, category)
+        return f"已记录创意想法：{content}（ID: {idea_id}）"
+    
+    @toolset.tool
+    async def learn_schedule_preference(
+        ctx: RunContext[DepsType],
+        preference_type: str,
+        value: str,
+        confidence: float = 1.0
+    ) -> str:
+        """学习用户的日程偏好
+        
+        Args:
+            preference_type: 偏好类型（如 "工作时间"、"偏好时间段_学习"、"午休时间"）
+            value: 偏好值（如 "09:00-18:00"、"上午"、"12:00-13:00"）
+            confidence: 学习置信度（0-1，默认1.0表示用户明确表达）
+        """
+        memory_sys = get_memory_system(ctx)
+        memory_sys.learn_schedule_preference(preference_type, value, confidence)
+        return f"已学习偏好：{preference_type} = {value}（置信度：{confidence}）"
     
     return toolset
 

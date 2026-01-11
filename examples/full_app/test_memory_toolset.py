@@ -26,7 +26,7 @@ from memory_system.toolset import (
     create_standalone_memory_system,
     MEMORY_SYSTEM_PROMPT,
 )
-from memory_system.core import MemorySystem, MemoryData
+from memory_system.core import MemorySystem
 
 # 使用 anyio 作为异步测试框架（与项目其他测试一致）
 pytestmark = pytest.mark.anyio
@@ -68,6 +68,10 @@ class TestMemoryToolsetCreation:
         assert "complete_todo" in tool_names
         assert "add_memory" in tool_names
         assert "learn_habit" in tool_names
+        assert "schedule_todo" in tool_names
+        assert "add_one_time_event" in tool_names
+        assert "add_idea" in tool_names
+        assert "learn_schedule_preference" in tool_names
 
     def test_toolset_has_all_required_tools(self):
         """测试工具集包含所有必需的工具"""
@@ -81,6 +85,11 @@ class TestMemoryToolsetCreation:
             "complete_todo",
             "add_memory",
             "learn_habit",
+            "schedule_todo",
+            "add_one_time_event",
+            "add_regular_schedule",
+            "add_idea",
+            "learn_schedule_preference",
         ]
         
         for tool_name in required_tools:
@@ -537,6 +546,8 @@ class TestAddTodoTool:
         todos = data.get("todos", {})
         todo_contents = [todo["content"] for todo in todos.get("pending", [])]
         assert "完成测试" in todo_contents
+        # 验证返回了ID
+        assert "ID:" in result or "todo_" in result
 
     async def test_add_todo_with_priority(self, toolset, ctx, temp_dir):
         """测试添加带优先级的待办"""
@@ -595,7 +606,7 @@ class TestAddTodoTool:
         data = memory_sys.storage.get_all_data()
         todos = data.get("todos", {})
         all_todo_contents = []
-        for status in ["pending", "in_progress", "completed"]:
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
             all_todo_contents.extend([todo["content"] for todo in todos.get(status, [])])
         assert "任务1" in all_todo_contents
         assert "任务2" in all_todo_contents
@@ -641,13 +652,13 @@ class TestCompleteTodoTool:
         assert any(todo["content"] == "要完成的任务" and todo.get("completed_at") for todo in completed_todos)
 
     async def test_complete_todo_nonexistent(self, toolset, ctx, temp_dir):
-        """测试完成不存在的待办（应该不报错）"""
+        """测试完成不存在的待办（应该返回错误消息）"""
         complete_todo_tool = toolset.tools["complete_todo"]
         result = await complete_todo_tool.function(ctx, content="不存在的任务")
         
-        # 应该返回成功消息，即使任务不存在
+        # 应该返回错误消息
         assert isinstance(result, str)
-        assert len(result) > 0
+        assert "未找到" in result or "失败" in result
 
 
 class TestAddMemoryTool:
@@ -815,60 +826,16 @@ class TestLearnHabitTool:
 class TestGetMemorySystemPrompt:
     """测试系统提示生成"""
 
-    def test_get_memory_system_prompt_without_memory(self):
-        """测试无记忆时的系统提示"""
-        prompt = get_memory_system_prompt(None)
+    def test_get_memory_system_prompt(self):
+        """测试系统提示生成（新版本不接受参数）"""
+        prompt = get_memory_system_prompt()
         assert prompt == MEMORY_SYSTEM_PROMPT
-
-    def test_get_memory_system_prompt_with_empty_memory(self):
-        """测试空记忆时的系统提示"""
-        memory = MemoryData(user_id="test_user")
-        prompt = get_memory_system_prompt(memory)
-        assert MEMORY_SYSTEM_PROMPT in prompt
-
-    def test_get_memory_system_prompt_with_basic_info(self):
-        """测试包含基本信息的系统提示"""
-        memory = MemoryData(
-            user_id="test_user",
-            basic_info={"姓名": "测试用户", "昵称": "小测"}
-        )
-        prompt = get_memory_system_prompt(memory)
-        
-        assert MEMORY_SYSTEM_PROMPT in prompt
-        assert "当前用户信息" in prompt
-        assert "测试用户" in prompt or "小测" in prompt
-
-    def test_get_memory_system_prompt_with_preferences(self):
-        """测试包含偏好的系统提示"""
-        memory = MemoryData(
-            user_id="test_user",
-            preferences={
-                "提醒方式": ["默认提醒方式：邮件"],
-                "工作习惯": ["工作日：周一至周五"]
-            }
-        )
-        prompt = get_memory_system_prompt(memory)
-        
-        assert MEMORY_SYSTEM_PROMPT in prompt
-        assert "用户偏好" in prompt
-        assert "提醒方式" in prompt or "工作习惯" in prompt
-
-    def test_get_memory_system_prompt_with_todos(self):
-        """测试包含待办的系统提示"""
-        memory = MemoryData(
-            user_id="test_user",
-            todos={
-                "in_progress": [
-                    {"content": "任务1", "priority": "high"},
-                    {"content": "任务2", "priority": "medium"},
-                ]
-            }
-        )
-        prompt = get_memory_system_prompt(memory)
-        
-        assert MEMORY_SYSTEM_PROMPT in prompt
-        assert "当前待办" in prompt
-        assert "任务1" in prompt or "任务2" in prompt
+        assert "read_memory" in prompt
+        assert "add_todo" in prompt
+        assert "schedule_todo" in prompt
+        assert "add_one_time_event" in prompt
+        assert "add_idea" in prompt
+        assert "learn_schedule_preference" in prompt
 
 
 class TestStandaloneMemorySystem:
@@ -1042,7 +1009,7 @@ class TestEdgeCases:
         data = memory_sys.storage.get_all_data()
         todos = data.get("todos", {})
         all_todo_contents = []
-        for status in ["pending", "in_progress", "completed"]:
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
             all_todo_contents.extend([todo["content"] for todo in todos.get(status, [])])
         assert long_content in all_todo_contents
 
@@ -1059,7 +1026,7 @@ class TestEdgeCases:
         data = memory_sys.storage.get_all_data()
         todos = data.get("todos", {})
         all_todo_contents = []
-        for status in ["pending", "in_progress", "completed"]:
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
             all_todo_contents.extend([todo["content"] for todo in todos.get(status, [])])
         assert special_content in all_todo_contents
 
@@ -1076,7 +1043,7 @@ class TestEdgeCases:
         data = memory_sys.storage.get_all_data()
         todos = data.get("todos", {})
         all_todo_contents = []
-        for status in ["pending", "in_progress", "completed"]:
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
             all_todo_contents.extend([todo["content"] for todo in todos.get(status, [])])
         assert unicode_content in all_todo_contents
 
@@ -1097,6 +1064,179 @@ class TestEdgeCases:
         data = memory_sys.storage.get_all_data()
         conversations = data.get("conversations", [])
         assert any(conv.get("topic") == "多行主题" for conv in conversations)
+
+
+class TestScheduleTodoTool:
+    """测试 schedule_todo 工具"""
+
+    @pytest.fixture
+    def temp_dir(self):
+        temp_dir = Path(tempfile.mkdtemp())
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @pytest.fixture
+    def toolset(self, temp_dir):
+        return create_memory_toolset(memory_dir=str(temp_dir), fixed_user_id="test_user")
+
+    @pytest.fixture
+    def ctx(self):
+        ctx = Mock(spec=RunContext)
+        ctx.deps = Mock()
+        return ctx
+
+    async def test_schedule_todo_basic(self, toolset, ctx, temp_dir):
+        """测试基本待办时间安排"""
+        # 先添加一个待办
+        memory_sys = MemorySystem(user_id="test_user", memory_dir=str(temp_dir))
+        todo_id = memory_sys.add_todo("要安排的任务", priority="high")
+        
+        # 安排时间
+        schedule_todo_tool = toolset.tools["schedule_todo"]
+        result = await schedule_todo_tool.function(
+            ctx,
+            content="要安排的任务",
+            start_time="2024-01-20T14:00:00",
+            duration="2小时",
+            reminder_minutes=15
+        )
+        
+        assert "已安排" in result
+        assert "要安排的任务" in result
+        
+        # 验证待办被安排
+        todo = memory_sys.get_todo(todo_id)
+        assert todo is not None
+        assert todo.get("scheduled_time") is not None
+        assert todo.get("scheduled_time", {}).get("start") == "2024-01-20T14:00:00"
+        
+        # 验证状态变为scheduled
+        data = memory_sys.storage.get_all_data()
+        scheduled_todos = data.get("todos", {}).get("scheduled", [])
+        assert any(t.get("id") == todo_id for t in scheduled_todos)
+
+
+class TestAddOneTimeEventTool:
+    """测试 add_one_time_event 工具"""
+
+    @pytest.fixture
+    def temp_dir(self):
+        temp_dir = Path(tempfile.mkdtemp())
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @pytest.fixture
+    def toolset(self, temp_dir):
+        return create_memory_toolset(memory_dir=str(temp_dir), fixed_user_id="test_user")
+
+    @pytest.fixture
+    def ctx(self):
+        ctx = Mock(spec=RunContext)
+        ctx.deps = Mock()
+        return ctx
+
+    async def test_add_one_time_event_basic(self, toolset, ctx, temp_dir):
+        """测试基本一次性事件添加"""
+        add_event_tool = toolset.tools["add_one_time_event"]
+        result = await add_event_tool.function(
+            ctx,
+            title="测试会议",
+            start_time="2024-01-21T10:00:00",
+            duration="1小时",
+            description="测试会议描述",
+            location="会议室A"
+        )
+        
+        assert "已添加一次性事件" in result
+        assert "测试会议" in result
+        assert "ID:" in result or "event_" in result
+        
+        # 验证事件被添加
+        memory_sys = MemorySystem(user_id="test_user", memory_dir=str(temp_dir))
+        data = memory_sys.storage.get_all_data()
+        upcoming_events = data.get("schedule", {}).get("upcoming", [])
+        assert any(e.get("title") == "测试会议" for e in upcoming_events)
+
+
+class TestAddIdeaTool:
+    """测试 add_idea 工具"""
+
+    @pytest.fixture
+    def temp_dir(self):
+        temp_dir = Path(tempfile.mkdtemp())
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @pytest.fixture
+    def toolset(self, temp_dir):
+        return create_memory_toolset(memory_dir=str(temp_dir), fixed_user_id="test_user")
+
+    @pytest.fixture
+    def ctx(self):
+        ctx = Mock(spec=RunContext)
+        ctx.deps = Mock()
+        return ctx
+
+    async def test_add_idea_basic(self, toolset, ctx, temp_dir):
+        """测试基本创意想法添加"""
+        add_idea_tool = toolset.tools["add_idea"]
+        result = await add_idea_tool.function(
+            ctx,
+            content="测试想法",
+            tags=["测试", "想法"],
+            category="产品想法"
+        )
+        
+        assert "已记录创意想法" in result
+        assert "测试想法" in result
+        assert "ID:" in result or "idea_" in result
+        
+        # 验证想法被添加
+        memory_sys = MemorySystem(user_id="test_user", memory_dir=str(temp_dir))
+        data = memory_sys.storage.get_all_data()
+        ideas = data.get("ideas", [])
+        assert any(i.get("content") == "测试想法" for i in ideas)
+
+
+class TestLearnSchedulePreferenceTool:
+    """测试 learn_schedule_preference 工具"""
+
+    @pytest.fixture
+    def temp_dir(self):
+        temp_dir = Path(tempfile.mkdtemp())
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @pytest.fixture
+    def toolset(self, temp_dir):
+        return create_memory_toolset(memory_dir=str(temp_dir), fixed_user_id="test_user")
+
+    @pytest.fixture
+    def ctx(self):
+        ctx = Mock(spec=RunContext)
+        ctx.deps = Mock()
+        return ctx
+
+    async def test_learn_schedule_preference_basic(self, toolset, ctx, temp_dir):
+        """测试基本日程偏好学习"""
+        learn_pref_tool = toolset.tools["learn_schedule_preference"]
+        result = await learn_pref_tool.function(
+            ctx,
+            preference_type="工作时间",
+            value="09:00-18:00",
+            confidence=1.0
+        )
+        
+        assert "已学习偏好" in result
+        assert "工作时间" in result
+        assert "09:00-18:00" in result
+        
+        # 验证偏好被学习
+        memory_sys = MemorySystem(user_id="test_user", memory_dir=str(temp_dir))
+        data = memory_sys.storage.get_all_data()
+        preferences = data.get("profile", {}).get("preferences", {}).get("日程偏好", {})
+        assert "工作时间" in preferences
+        assert preferences["工作时间"]["value"] == "09:00-18:00"
 
 
 if __name__ == "__main__":

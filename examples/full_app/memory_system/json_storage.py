@@ -1,20 +1,30 @@
 """
-基于 JSON 的记忆存储实现
+基于 JSON 的记忆存储实现（重构版本）
 
-使用 JSON 格式存储所有记忆数据，避免 Markdown 解析的复杂性和潜在问题。
-数据结构清晰，易于读写和维护。
+使用 JSON 格式存储所有记忆数据，所有操作通过ID进行，支持缓存和批量操作。
 """
 
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
+
+from .utils import (
+    calculate_remind_time,
+    format_datetime,
+    generate_id,
+    get_current_time,
+    parse_datetime,
+    parse_duration,
+    time_overlap,
+)
 
 
 class JsonMemoryStorage:
-    """基于 JSON 的记忆存储系统"""
+    """基于 JSON 的记忆存储系统（重构版本）"""
     
     def __init__(
         self,
@@ -32,13 +42,21 @@ class JsonMemoryStorage:
         # JSON 文件路径
         self.json_file = self.user_dir / "memory.json"
         
+        # 缓存机制
+        self._cache: Optional[Dict[str, Any]] = None
+        self._cache_timestamp: Optional[float] = None
+        self._cache_ttl: float = 60.0  # 缓存60秒
+        
         # 初始化 JSON 文件
         self._initialize_json()
+        
+        # 迁移旧数据（一次性）
+        self._migrate_old_data()
     
     def _initialize_json(self):
         """初始化 JSON 文件（如果不存在）"""
         if not self.json_file.exists():
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = get_current_time()
             default_data = {
                 "profile": {
                     "basic_info": {
@@ -60,12 +78,19 @@ class JsonMemoryStorage:
                         "内容偏好": {
                             "喜欢的主题": "",
                             "回复风格": "简洁、专业"
+                        },
+                        "日程偏好": {},
+                        "询问偏好": {
+                            "任务完成询问": "after_task_time",
+                            "进度检查频率": "weekly",
+                            "最小询问间隔小时数": 4
                         }
                     }
                 },
                 "todos": {
-                    "in_progress": [],
                     "pending": [],
+                    "scheduled": [],
+                    "in_progress": [],
                     "completed": []
                 },
                 "habits": {
@@ -83,37 +108,158 @@ class JsonMemoryStorage:
                     "contacts": [],
                     "important": []
                 },
+                "reminders": [],
+                "followups": [],
+                "ideas": [],
                 "metadata": {
                     "created_at": now,
                     "last_updated": now,
-                    "conversation_count": 0
+                    "conversation_count": 0,
+                    "version": "2.0"
                 }
             }
             self._write_json(default_data)
     
-    def _read_json(self) -> Dict[str, Any]:
-        """读取 JSON 文件"""
+    def _migrate_old_data(self):
+        """迁移旧数据格式（一次性）"""
+        data = self._read_json(use_cache=False)
+        
+        # 检查是否已经迁移过
+        if data.get("metadata", {}).get("version") == "2.0":
+            return
+        
+        # 为todos添加ID和缺失字段
+        for status in ["pending", "in_progress", "completed"]:
+            for todo in data["todos"].get(status, []):
+                if "id" not in todo:
+                    todo["id"] = generate_id("todo")
+                if "category" not in todo:
+                    todo["category"] = None
+                if "estimated_duration" not in todo:
+                    todo["estimated_duration"] = None
+                if "scheduled_time" not in todo:
+                    todo["scheduled_time"] = None
+                if "reminder_minutes" not in todo:
+                    todo["reminder_minutes"] = 15
+                if "updated_at" not in todo:
+                    todo["updated_at"] = todo.get("created_at")
+        
+        # 添加scheduled状态
+        if "scheduled" not in data["todos"]:
+            data["todos"]["scheduled"] = []
+        
+        # 为schedule添加ID和扩展字段
+        for event in data["schedule"].get("regular", []):
+            if "id" not in event:
+                event["id"] = generate_id("recurring")
+            if "duration" not in event:
+                event["duration"] = "1小时"
+            if "end_date" not in event:
+                event["end_date"] = None
+            if "reminder_minutes" not in event:
+                event["reminder_minutes"] = 15
+        
+        for event in data["schedule"].get("upcoming", []):
+            if "id" not in event:
+                event["id"] = generate_id("event")
+            if "duration" not in event:
+                if event.get("end_time"):
+                    # 计算duration
+                    try:
+                        start = parse_datetime(event["start_time"])
+                        end = parse_datetime(event["end_time"])
+                        duration_minutes = int((end - start).total_seconds() / 60)
+                        from .utils import format_duration
+                        event["duration"] = format_duration(duration_minutes)
+                    except:
+                        event["duration"] = "1小时"
+                else:
+                    event["duration"] = "1小时"
+            if "location" not in event:
+                event["location"] = None
+            if "reminder_minutes" not in event:
+                event["reminder_minutes"] = 15
+        
+        # 添加新字段
+        if "reminders" not in data:
+            data["reminders"] = []
+        if "followups" not in data:
+            data["followups"] = []
+        if "ideas" not in data:
+            data["ideas"] = []
+        
+        # 扩展preferences
+        if "日程偏好" not in data["profile"]["preferences"]:
+            data["profile"]["preferences"]["日程偏好"] = {}
+        if "询问偏好" not in data["profile"]["preferences"]:
+            data["profile"]["preferences"]["询问偏好"] = {
+                "任务完成询问": "after_task_time",
+                "进度检查频率": "weekly",
+                "最小询问间隔小时数": 4
+            }
+        
+        # 更新版本号
+        if "metadata" not in data:
+            data["metadata"] = {}
+        data["metadata"]["version"] = "2.0"
+        
+        self._write_json(data, invalidate_cache=True)
+    
+    def _read_json(self, use_cache: bool = True) -> Dict[str, Any]:
+        """读取 JSON 文件（带缓存）"""
+        if use_cache and self._cache is not None:
+            if time.time() - self._cache_timestamp < self._cache_ttl:
+                return self._cache
+        
         if not self.json_file.exists():
             self._initialize_json()
         
         try:
             with open(self.json_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
             # 如果文件损坏，重新初始化
             self._initialize_json()
             with open(self.json_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+        
+        # 更新缓存
+        self._cache = data
+        self._cache_timestamp = time.time()
+        
+        return data
     
-    def _write_json(self, data: Dict[str, Any]):
-        """写入 JSON 文件"""
+    def _write_json(self, data: Dict[str, Any], invalidate_cache: bool = True):
+        """写入 JSON 文件（清除缓存）"""
         # 更新最后更新时间
         if "metadata" in data:
-            data["metadata"]["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["metadata"]["last_updated"] = get_current_time()
         
         # 使用缩进使 JSON 文件更易读
         with open(self.json_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        if invalidate_cache:
+            self._cache = None
+            self._cache_timestamp = None
+    
+    def batch_update(self, operations: List[Callable[[Dict], Dict]]):
+        """批量操作（原子性）
+        
+        Args:
+            operations: 操作函数列表，每个函数接收data并返回修改后的data
+        """
+        data = self._read_json(use_cache=False)
+        
+        try:
+            for op in operations:
+                data = op(data)
+            self._write_json(data, invalidate_cache=True)
+        except Exception as e:
+            # 回滚：重新读取文件
+            self._cache = None
+            self._cache_timestamp = None
+            raise
     
     # ========== Profile 操作 ==========
     
@@ -124,79 +270,571 @@ class JsonMemoryStorage:
         self._write_json(data)
     
     def update_preference(self, category: str, key: str, value: str):
-        """更新偏好设置
-        
-        如果 category 是"基本信息"，则更新基本信息表格中的字段
-        否则更新偏好设置中的项
-        """
-        # 特殊处理：如果 category 是"基本信息"，则更新基本信息
+        """更新偏好设置"""
         if category == "基本信息":
             self.update_profile(key, value)
             return
         
         data = self._read_json()
         
-        # 确保偏好类别存在
         if category not in data["profile"]["preferences"]:
             data["profile"]["preferences"][category] = {}
         
-        # 更新偏好值
         data["profile"]["preferences"][category][key] = value
         self._write_json(data)
     
-    # ========== Todos 操作 ==========
+    # ========== Todos 操作（重构：通过ID）==========
     
-    def add_todo(self, content: str, priority: str = "medium", due_date: Optional[str] = None, status: str = "pending"):
-        """添加待办事项"""
+    def add_todo(
+        self,
+        content: str,
+        priority: str = "medium",
+        due_date: Optional[str] = None,
+        category: Optional[str] = None,
+        estimated_duration: Optional[str] = None,
+        status: str = "pending"
+    ) -> str:
+        """添加待办事项，返回ID"""
+        todo_id = generate_id("todo")
+        now = get_current_time()
+        
         data = self._read_json()
         
         todo_item = {
+            "id": todo_id,
             "content": content,
             "priority": priority,
+            "category": category,
+            "estimated_duration": estimated_duration,
             "due_date": due_date,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "scheduled_time": None,
+            "reminder_minutes": 15,
+            "created_at": now,
+            "updated_at": now
         }
         
-        # 添加到对应状态列表
+        if status not in data["todos"]:
+            data["todos"][status] = []
         data["todos"][status].append(todo_item)
         self._write_json(data)
-    
-    def complete_todo(self, content: str):
-        """完成待办事项"""
-        data = self._read_json()
-        now = datetime.now().strftime("%Y-%m-%d")
         
-        # 在所有状态中查找待办
-        for status in ["pending", "in_progress"]:
-            for todo in data["todos"][status]:
-                if todo["content"] == content:
-                    # 标记为完成
+        return todo_id
+    
+    def get_todo(self, todo_id: str) -> Optional[Dict[str, Any]]:
+        """通过ID获取待办"""
+        data = self._read_json()
+        
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
+            for todo in data["todos"].get(status, []):
+                if todo.get("id") == todo_id:
+                    return todo
+        
+        return None
+    
+    def find_todo_by_content(self, content: str) -> Optional[str]:
+        """通过content查找ID（仅用于查询，不用于更新）"""
+        data = self._read_json()
+        
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
+            for todo in data["todos"].get(status, []):
+                if todo.get("content") == content:
+                    return todo.get("id")
+        
+        return None
+    
+    def update_todo(self, todo_id: str, **kwargs) -> bool:
+        """更新待办（通过ID）"""
+        data = self._read_json()
+        
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
+            for todo in data["todos"].get(status, []):
+                if todo.get("id") == todo_id:
+                    # 更新字段
+                    for key, value in kwargs.items():
+                        if key != "id":  # 不允许修改ID
+                            todo[key] = value
+                    todo["updated_at"] = get_current_time()
+                    self._write_json(data)
+                    return True
+        
+        return False
+    
+    def complete_todo(self, todo_id: str) -> bool:
+        """完成待办（通过ID）"""
+        data = self._read_json()
+        now = get_current_time()
+        
+        for status in ["pending", "scheduled", "in_progress"]:
+            for todo in data["todos"].get(status, []):
+                if todo.get("id") == todo_id:
                     todo["completed_at"] = now
+                    todo["updated_at"] = now
                     # 移动到已完成列表
                     data["todos"]["completed"].append(todo)
                     data["todos"][status].remove(todo)
                     self._write_json(data)
-                    return
+                    return True
+        
+        return False
     
-    def remove_todo(self, content: str):
-        """删除待办事项（用于清理重复或已转为日程的待办）"""
+    def remove_todo(self, todo_id: str) -> bool:
+        """删除待办（通过ID）"""
         data = self._read_json()
         
-        # 在所有状态中查找并删除
-        for status in ["pending", "in_progress", "completed"]:
+        for status in ["pending", "scheduled", "in_progress", "completed"]:
             data["todos"][status] = [
-                todo for todo in data["todos"][status]
-                if todo["content"] != content
+                todo for todo in data["todos"].get(status, [])
+                if todo.get("id") != todo_id
             ]
         
         self._write_json(data)
+        return True
     
-    # ========== Diary 操作 ==========
+    def update_todo_status(self, todo_id: str, status: str) -> bool:
+        """更新待办状态（pending/scheduled/in_progress/completed）"""
+        data = self._read_json()
+        
+        # 找到待办
+        todo = None
+        old_status = None
+        for s in ["pending", "scheduled", "in_progress", "completed"]:
+            for t in data["todos"].get(s, []):
+                if t.get("id") == todo_id:
+                    todo = t
+                    old_status = s
+                    break
+            if todo:
+                break
+        
+        if not todo:
+            return False
+        
+        # 移动到新状态
+        if old_status:
+            data["todos"][old_status].remove(todo)
+        if status not in data["todos"]:
+            data["todos"][status] = []
+        data["todos"][status].append(todo)
+        todo["updated_at"] = get_current_time()
+        
+        self._write_json(data)
+        return True
+    
+    def schedule_todo(
+        self,
+        todo_id: str,
+        start_time: str,
+        duration: str,
+        reminder_minutes: int = 15
+    ) -> bool:
+        """为待办安排时间预算"""
+        data = self._read_json()
+        
+        # 找到待办
+        todo = None
+        old_status = None
+        for status in ["pending", "scheduled", "in_progress"]:
+            for t in data["todos"].get(status, []):
+                if t.get("id") == todo_id:
+                    todo = t
+                    old_status = status
+                    break
+            if todo:
+                break
+        
+        if not todo:
+            return False
+        
+        # 计算结束时间
+        start_dt = parse_datetime(start_time)
+        duration_minutes = parse_duration(duration)
+        end_dt = start_dt + timedelta(minutes=duration_minutes)
+        
+        # 更新待办
+        todo["scheduled_time"] = {
+            "start": start_time,
+            "end": format_datetime(end_dt),
+            "duration": duration
+        }
+        todo["reminder_minutes"] = reminder_minutes
+        todo["updated_at"] = get_current_time()
+        
+        # 移动到scheduled状态
+        if old_status and old_status != "scheduled":
+            data["todos"][old_status].remove(todo)
+        if "scheduled" not in data["todos"]:
+            data["todos"]["scheduled"] = []
+        data["todos"]["scheduled"].append(todo)
+        
+        # 创建提醒
+        self._create_reminder("todo", todo_id, start_time, reminder_minutes)
+        
+        # 创建询问任务
+        ask_at_dt = end_dt + timedelta(hours=1)  # 任务结束后1小时询问
+        self._create_followup("task_completion", todo_id, format_datetime(ask_at_dt))
+        
+        self._write_json(data)
+        return True
+    
+    def query_todos(
+        self,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+        due_before: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """查询待办"""
+        data = self._read_json()
+        
+        results = []
+        statuses = [status] if status else ["pending", "scheduled", "in_progress", "completed"]
+        
+        for s in statuses:
+            for todo in data["todos"].get(s, []):
+                # 过滤条件
+                if category and todo.get("category") != category:
+                    continue
+                if due_before and todo.get("due_date"):
+                    if todo["due_date"] > due_before:
+                        continue
+                results.append(todo)
+        
+        return results
+    
+    # ========== Schedule 操作（扩展）==========
+    
+    def add_one_time_event(
+        self,
+        title: str,
+        start_time: str,
+        end_time: Optional[str] = None,
+        duration: Optional[str] = None,
+        description: str = "",
+        location: Optional[str] = None,
+        reminder_minutes: int = 15
+    ) -> str:
+        """添加一次性事件，返回ID"""
+        event_id = generate_id("event")
+        now = get_current_time()
+        
+        # 计算duration或end_time
+        if end_time:
+            start_dt = parse_datetime(start_time)
+            end_dt = parse_datetime(end_time)
+            duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
+            duration = format_duration(duration_minutes)
+        elif duration:
+            start_dt = parse_datetime(start_time)
+            duration_minutes = parse_duration(duration)
+            end_dt = start_dt + timedelta(minutes=duration_minutes)
+            end_time = format_datetime(end_dt)
+        else:
+            duration = "1小时"
+            start_dt = parse_datetime(start_time)
+            end_dt = start_dt + timedelta(hours=1)
+            end_time = format_datetime(end_dt)
+        
+        data = self._read_json()
+        
+        event = {
+            "id": event_id,
+            "title": title,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration,
+            "description": description,
+            "location": location,
+            "reminder_minutes": reminder_minutes,
+            "created_at": now
+        }
+        
+        data["schedule"]["upcoming"].append(event)
+        
+        # 自动创建提醒
+        self._create_reminder("schedule", event_id, start_time, reminder_minutes)
+        
+        self._write_json(data)
+        return event_id
+    
+    def add_recurring_schedule(
+        self,
+        title: str,
+        start_time: str,
+        duration: str,
+        frequency: str,
+        description: str = "",
+        end_date: Optional[str] = None,
+        reminder_minutes: int = 15
+    ) -> str:
+        """添加周期性日程，返回ID"""
+        schedule_id = generate_id("recurring")
+        now = get_current_time()
+        
+        data = self._read_json()
+        
+        event = {
+            "id": schedule_id,
+            "title": title,
+            "time": start_time,
+            "duration": duration,
+            "frequency": frequency,
+            "description": description,
+            "end_date": end_date,
+            "reminder_minutes": reminder_minutes,
+            "created_at": now
+        }
+        
+        data["schedule"]["regular"].append(event)
+        self._write_json(data)
+        return schedule_id
+    
+    def get_schedule_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """通过ID获取日程事件"""
+        data = self._read_json()
+        
+        for event in data["schedule"].get("regular", []):
+            if event.get("id") == event_id:
+                return event
+        
+        for event in data["schedule"].get("upcoming", []):
+            if event.get("id") == event_id:
+                return event
+        
+        return None
+    
+    def check_time_conflict(
+        self,
+        start_time: str,
+        end_time: str,
+        exclude_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """检测时间冲突"""
+        conflicts = []
+        data = self._read_json()
+        
+        # 检查一次性事件
+        for event in data["schedule"].get("upcoming", []):
+            if exclude_id and event.get("id") == exclude_id:
+                continue
+            if time_overlap(start_time, end_time, event["start_time"], event.get("end_time")):
+                conflicts.append(event)
+        
+        # 检查已安排的待办
+        for todo in data["todos"].get("scheduled", []):
+            if exclude_id and todo.get("id") == exclude_id:
+                continue
+            scheduled = todo.get("scheduled_time")
+            if scheduled:
+                if time_overlap(start_time, end_time, scheduled["start"], scheduled.get("end")):
+                    conflicts.append(todo)
+        
+        return conflicts
+    
+    # ========== 新增功能 ==========
+    
+    def add_idea(
+        self,
+        content: str,
+        date: Optional[str] = None,
+        time: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None
+    ) -> str:
+        """添加创意想法，返回ID"""
+        idea_id = generate_id("idea")
+        now = get_current_time()
+        
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        if not time:
+            time = datetime.now().strftime("%H:%M")
+        
+        data = self._read_json()
+        
+        idea = {
+            "id": idea_id,
+            "content": content,
+            "date": date,
+            "time": time,
+            "tags": tags or [],
+            "category": category,
+            "created_at": now
+        }
+        
+        data["ideas"].append(idea)
+        self._write_json(data)
+        return idea_id
+    
+    def learn_schedule_preference(
+        self,
+        preference_type: str,
+        value: str,
+        confidence: float = 1.0,
+        source: str = "explicit"
+    ):
+        """学习日程偏好"""
+        data = self._read_json()
+        
+        if "日程偏好" not in data["profile"]["preferences"]:
+            data["profile"]["preferences"]["日程偏好"] = {}
+        
+        preferences = data["profile"]["preferences"]["日程偏好"]
+        
+        if preference_type not in preferences:
+            preferences[preference_type] = {
+                "value": value,
+                "confidence": confidence,
+                "source": source,
+                "learned_at": get_current_time()
+            }
+        else:
+            # 更新现有偏好（如果置信度更高）
+            existing = preferences[preference_type]
+            if confidence >= existing.get("confidence", 0):
+                existing["value"] = value
+                existing["confidence"] = confidence
+                existing["source"] = source
+                existing["learned_at"] = get_current_time()
+        
+        self._write_json(data)
+    
+    def _create_reminder(
+        self,
+        reminder_type: str,
+        target_id: str,
+        remind_at: str,
+        reminder_minutes: int
+    ) -> str:
+        """创建提醒任务（内部方法），返回ID"""
+        reminder_id = generate_id("reminder")
+        now = get_current_time()
+        
+        # 计算提醒时间
+        if isinstance(remind_at, str):
+            remind_dt = parse_datetime(remind_at) - timedelta(minutes=reminder_minutes)
+            remind_at_str = format_datetime(remind_dt)
+        else:
+            remind_at_str = remind_at
+        
+        data = self._read_json()
+        
+        reminder = {
+            "id": reminder_id,
+            "type": reminder_type,
+            "target_id": target_id,
+            "remind_at": remind_at_str,
+            "reminded": False,
+            "reminder_minutes": reminder_minutes,
+            "content": None,  # 可以后续生成
+            "created_at": now
+        }
+        
+        data["reminders"].append(reminder)
+        self._write_json(data)
+        return reminder_id
+    
+    def _create_followup(
+        self,
+        followup_type: str,
+        target_id: str,
+        ask_at: str,
+        frequency: str = "after_task_time"
+    ) -> str:
+        """创建询问任务（内部方法），返回ID"""
+        followup_id = generate_id("followup")
+        now = get_current_time()
+        
+        data = self._read_json()
+        
+        followup = {
+            "id": followup_id,
+            "type": followup_type,
+            "target_id": target_id,
+            "ask_at": ask_at,
+            "asked": False,
+            "frequency": frequency,
+            "content": None,  # 可以后续生成
+            "created_at": now,
+            "last_asked_at": None,
+            "response_count": 0
+        }
+        
+        data["followups"].append(followup)
+        self._write_json(data)
+        return followup_id
+    
+    def get_pending_reminders(self, before: Optional[str] = None) -> List[Dict[str, Any]]:
+        """获取待触发的提醒"""
+        data = self._read_json()
+        now = get_current_time()
+        
+        if before:
+            before_dt = parse_datetime(before)
+        else:
+            before_dt = parse_datetime(now)
+        
+        results = []
+        for reminder in data.get("reminders", []):
+            if reminder.get("reminded"):
+                continue
+            remind_at = reminder.get("remind_at")
+            if remind_at:
+                remind_dt = parse_datetime(remind_at)
+                if remind_dt <= before_dt:
+                    results.append(reminder)
+        
+        return results
+    
+    def get_pending_followups(self, before: Optional[str] = None) -> List[Dict[str, Any]]:
+        """获取待触发的询问"""
+        data = self._read_json()
+        now = get_current_time()
+        
+        if before:
+            before_dt = parse_datetime(before)
+        else:
+            before_dt = parse_datetime(now)
+        
+        results = []
+        for followup in data.get("followups", []):
+            if followup.get("asked"):
+                continue
+            ask_at = followup.get("ask_at")
+            if ask_at:
+                ask_dt = parse_datetime(ask_at)
+                if ask_dt <= before_dt:
+                    results.append(followup)
+        
+        return results
+    
+    def mark_reminder_triggered(self, reminder_id: str):
+        """标记提醒已触发"""
+        data = self._read_json()
+        
+        for reminder in data.get("reminders", []):
+            if reminder.get("id") == reminder_id:
+                reminder["reminded"] = True
+                self._write_json(data)
+                return
+    
+    def mark_followup_asked(self, followup_id: str):
+        """标记询问已询问"""
+        data = self._read_json()
+        now = get_current_time()
+        
+        for followup in data.get("followups", []):
+            if followup.get("id") == followup_id:
+                followup["asked"] = True
+                followup["last_asked_at"] = now
+                followup["response_count"] = followup.get("response_count", 0) + 1
+                self._write_json(data)
+                return
+    
+    # ========== 其他操作（保持兼容）==========
     
     def add_diary_entry(self, title: str, content: str):
         """添加日记条目"""
         data = self._read_json()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = get_current_time()
         
         entry = {
             "title": title,
@@ -204,57 +842,12 @@ class JsonMemoryStorage:
             "created_at": now
         }
         
-        # 添加到日记列表开头
         data["diary"].insert(0, entry)
         
-        # 只保留最近 100 条日记
         if len(data["diary"]) > 100:
             data["diary"] = data["diary"][:100]
         
         self._write_json(data)
-    
-    # ========== Schedule 操作 ==========
-    
-    def add_schedule_event(self, title: str, start_time: str, end_time: Optional[str] = None, description: str = ""):
-        """添加一次性日程事件"""
-        data = self._read_json()
-        
-        event = {
-            "title": title,
-            "start_time": start_time,
-            "end_time": end_time,
-            "description": description,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # 添加到即将到来的事件列表
-        data["schedule"]["upcoming"].append(event)
-        self._write_json(data)
-    
-    def add_regular_schedule(self, title: str, time: str, frequency: str, description: str = ""):
-        """添加重复性日程
-        
-        Args:
-            title: 日程标题
-            time: 时间（格式：HH:MM，如 "10:00"）
-            frequency: 频率（如 "每天"、"工作日"、"每周一"、"每周五"、"每月1号"等）
-            description: 备注说明
-        """
-        data = self._read_json()
-        
-        event = {
-            "title": title,
-            "time": time,
-            "frequency": frequency,
-            "description": description,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # 添加到定期日程列表
-        data["schedule"]["regular"].append(event)
-        self._write_json(data)
-    
-    # ========== Habits 操作 ==========
     
     def learn_habit(self, habit: str, category: str = "工作习惯"):
         """学习新习惯"""
@@ -266,15 +859,11 @@ class JsonMemoryStorage:
             "learned_at": now
         }
         
-        # 确保类别存在
         if category not in data["habits"]:
             data["habits"][category] = []
         
-        # 添加到对应类别
         data["habits"][category].append(habit_item)
         self._write_json(data)
-    
-    # ========== Relationships 操作 ==========
     
     def add_relationship(self, name: str, relation: str, details: str = ""):
         """添加人际关系"""
@@ -284,14 +873,11 @@ class JsonMemoryStorage:
             "name": name,
             "relation": relation,
             "details": details,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "created_at": get_current_time()
         }
         
-        # 添加到常用联系人列表
         data["relationships"]["contacts"].append(relationship)
         self._write_json(data)
-    
-    # ========== Conversations 操作 ==========
     
     def add_conversation(self, topic: str, summary: List[str]):
         """添加对话摘要"""
@@ -304,16 +890,12 @@ class JsonMemoryStorage:
             "summary": summary
         }
         
-        # 添加到对话列表开头
         data["conversations"].insert(0, conversation)
         
-        # 只保留最近 50 条对话
         if len(data["conversations"]) > 50:
             data["conversations"] = data["conversations"][:50]
         
         self._write_json(data)
-    
-    # ========== 读取操作 ==========
     
     def get_context(self, sections: Optional[List[str]] = None) -> str:
         """获取记忆上下文（用于注入系统提示）"""
@@ -323,14 +905,13 @@ class JsonMemoryStorage:
         if sections is None or "profile" in sections:
             context_parts.append("## 👤 个人档案")
             
-            # 基本信息 - 突出显示用户名字
             basic_info = data["profile"]["basic_info"]
             user_name = basic_info.get("姓名") or basic_info.get("昵称")
             
             if user_name:
                 context_parts.append(f"### ⭐ 用户姓名：**{user_name}**")
                 context_parts.append("")
-                context_parts.append("**重要**：这是你的主人，你必须称呼用户为：" + user_name)
+                context_parts.append("**重要**：这是你的主人。你只在打招呼或对话开始时称呼用户为：" + user_name + "，让用户知道你记得他们。之后正常交流即可，不需要频繁提及名字。")
                 context_parts.append("")
             
             context_parts.append("### 基本信息")
@@ -339,7 +920,6 @@ class JsonMemoryStorage:
                     context_parts.append(f"- {key}：{value}")
             context_parts.append("")
             
-            # 偏好设置（只显示前几个）
             preferences = data["profile"]["preferences"]
             if preferences:
                 context_parts.append("### 偏好设置")
@@ -352,8 +932,11 @@ class JsonMemoryStorage:
                 context_parts.append("")
         
         if sections is None or "todos" in sections:
-            # 合并所有状态的待办，优先显示进行中的
-            all_todos = data["todos"].get("in_progress", []) + data["todos"].get("pending", [])
+            all_todos = (
+                data["todos"].get("in_progress", []) +
+                data["todos"].get("scheduled", []) +
+                data["todos"].get("pending", [])
+            )
             if all_todos:
                 context_parts.append("## 当前待办")
                 for todo in all_todos[:5]:
@@ -369,12 +952,11 @@ class JsonMemoryStorage:
                 for category, habit_list in habits.items():
                     if habit_list:
                         context_parts.append(f"### {category}")
-                        for habit_item in habit_list[-5:]:  # 最近5个
+                        for habit_item in habit_list[-5:]:
                             context_parts.append(f"- {habit_item['habit']}")
                 context_parts.append("")
         
         if sections is None or "schedule" in sections:
-            # 定期日程
             regular_schedules = data["schedule"].get("regular", [])
             if regular_schedules:
                 context_parts.append("## 📅 定期日程")
@@ -383,11 +965,10 @@ class JsonMemoryStorage:
                     context_parts.append(f"- **{schedule['title']}**：{schedule['time']}，{schedule['frequency']}{desc_str}")
                 context_parts.append("")
             
-            # 即将到来的事件
             upcoming_events = data["schedule"].get("upcoming", [])
             if upcoming_events:
                 context_parts.append("## 📅 即将到来的事件")
-                for event in upcoming_events[:5]:  # 最近5个
+                for event in upcoming_events[:5]:
                     end_str = f"-{event['end_time']}" if event.get('end_time') else ""
                     desc_str = f"（{event['description']}）" if event.get('description') else ""
                     context_parts.append(f"- **{event['title']}**：{event['start_time']}{end_str}{desc_str}")
@@ -397,9 +978,9 @@ class JsonMemoryStorage:
             conversations = data["conversations"]
             if conversations:
                 context_parts.append("## 最近对话摘要")
-                for conv in conversations[:3]:  # 最近3条
+                for conv in conversations[:3]:
                     context_parts.append(f"### {conv['date']} - {conv['topic']}")
-                    for point in conv['summary'][:3]:  # 前3个要点
+                    for point in conv['summary'][:3]:
                         context_parts.append(f"  - {point}")
                 context_parts.append("")
         
@@ -424,4 +1005,4 @@ class JsonMemoryStorage:
     
     def set_all_data(self, data: Dict[str, Any]):
         """设置所有数据（用于导入或迁移）"""
-        self._write_json(data)
+        self._write_json(data, invalidate_cache=True)
