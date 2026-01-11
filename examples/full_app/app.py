@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -480,7 +483,72 @@ async def lifespan(app: FastAPI):
         print(f"⚠️  Docker not available: {e}")
         print("⚠️  Using FilesystemBackend fallback (code execution disabled)")
     
+    # Start frontend dev server if in development mode
+    frontend_process = None
+    dist_dir = STATIC_DIR / "dist"
+    node_modules_dir = STATIC_DIR / "node_modules"
+    
+    # Only start dev server if dist/ doesn't exist (not built) and node_modules exists
+    if not dist_dir.exists() and node_modules_dir.exists():
+        try:
+            # Check if npm is available
+            subprocess.run(["npm", "--version"], capture_output=True, check=True)
+            
+            print("Starting frontend development server...")
+            # Start npm run dev in the background
+            # Use shell=True on Windows for better compatibility
+            kwargs = {
+                "cwd": str(STATIC_DIR),
+                "env": {**os.environ, "FORCE_COLOR": "1"},
+            }
+            if sys.platform == "win32":
+                kwargs["shell"] = True
+                # CREATE_NEW_PROCESS_GROUP is available on Windows
+                if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+                    kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["stdout"] = subprocess.DEVNULL
+                kwargs["stderr"] = subprocess.DEVNULL
+            
+            frontend_process = subprocess.Popen(
+                ["npm", "run", "dev"],
+                **kwargs
+            )
+            print(f"✓ Frontend dev server started (PID: {frontend_process.pid})")
+            print("  Frontend: http://localhost:3000")
+            print("  Backend:  http://localhost:8080")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"⚠️  Could not start frontend dev server: {e}")
+            print("⚠️  Make sure npm is installed and run 'npm install' in static/ directory")
+            frontend_process = None
+    elif dist_dir.exists():
+        print("Using production build (dist/ directory found)")
+        print("Backend available at http://localhost:8080")
+    else:
+        print("⚠️  Frontend not built. Run 'npm install && npm run build' in static/ directory")
+        print("Backend available at http://localhost:8080")
+    
     yield
+
+    # Shutdown frontend dev server if it was started
+    if frontend_process is not None:
+        print("Stopping frontend dev server...")
+        try:
+            if sys.platform == "win32":
+                # On Windows, use taskkill to terminate the process tree
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(frontend_process.pid)],
+                    capture_output=True,
+                )
+            else:
+                frontend_process.terminate()
+                try:
+                    frontend_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    frontend_process.kill()
+            print("✓ Frontend dev server stopped")
+        except Exception as e:
+            print(f"⚠️  Error stopping frontend dev server: {e}")
 
     # Shutdown all sessions if Docker was available
     if session_manager is not None:
@@ -507,17 +575,24 @@ app.add_middleware(
 )
 
 # Serve static files
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# In production, serve from dist/ directory (built React app)
+# In development, serve from static/ directory (source files)
+DIST_DIR = STATIC_DIR / "dist"
+if DIST_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(DIST_DIR)), name="static")
+else:
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main HTML page."""
-    html_path = STATIC_DIR / "index.html"
+    # Try dist/index.html first (production build), then static/index.html (development)
+    html_path = DIST_DIR / "index.html" if DIST_DIR.exists() else STATIC_DIR / "index.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text())
-    return HTMLResponse(content="<h1>Frontend not found. Check static/index.html</h1>")
+    return HTMLResponse(content="<h1>Frontend not found. Run 'npm run build' in static/ directory</h1>")
 
 
 @app.websocket("/ws/chat")
