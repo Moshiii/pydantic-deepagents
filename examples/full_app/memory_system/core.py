@@ -35,7 +35,7 @@ class MemoryData:
 
 
 class MemoryParser:
-    """Markdown 记忆文件解析器 - 纯 Python 实现"""
+    """记忆文件解析器 - 纯 Python 实现（用于兼容旧接口）"""
     
     def __init__(self, file_path: str | Path):
         self.file_path = Path(file_path)
@@ -681,16 +681,10 @@ class MemoryUpdater:
 class MemorySystem:
     """记忆系统主类 - 提供高级接口
     
-    支持分门别类的存储结构：
+    使用 JSON 格式存储所有记忆数据：
     memories/
       owner/
-        profile.md      # 基本信息和偏好
-        todos.md         # 待办事项
-        diary.md         # 日记
-        schedule.md      # 日程安排
-        habits.md        # 生活习惯
-        relationships.md # 人际关系
-        conversations.md # 最近对话
+        memory.json      # 所有记忆数据（JSON 格式）
     """
     
     def __init__(
@@ -702,16 +696,16 @@ class MemorySystem:
         self.user_id = user_id
         self.memory_dir = Path(memory_dir)
         
-        # 使用新的分门别类存储
-        from .categorized_storage import CategorizedMemoryStorage
-        self.storage = CategorizedMemoryStorage(user_id=user_id, memory_dir=memory_dir)
+        # 使用 JSON 存储
+        from .json_storage import JsonMemoryStorage
+        self.storage = JsonMemoryStorage(user_id=user_id, memory_dir=memory_dir)
         
-        # 保留旧的接口用于兼容
+        # 保留 template_path 参数用于兼容（虽然不再使用）
         self.template_path = Path(template_path) if template_path else None
     
     def get_memory(self) -> MemoryData:
         """获取完整记忆数据（兼容旧接口）"""
-        # 返回一个空的 MemoryData，因为新系统使用分门别类的存储
+        # 返回一个空的 MemoryData，因为新系统使用 JSON 存储
         return MemoryData(user_id=self.user_id)
     
     def get_context(self, sections: Optional[List[str]] = None) -> str:
@@ -722,7 +716,7 @@ class MemorySystem:
         """
         return self.storage.get_context(sections)
     
-    # 便捷方法 - 委托给新的存储系统
+    # 便捷方法 - 委托给 JSON 存储系统
     def update_preference(self, category: str, key: str, value: str):
         """更新偏好"""
         self.storage.update_preference(category, key, value)
@@ -735,6 +729,10 @@ class MemorySystem:
         """完成待办"""
         self.storage.complete_todo(content)
     
+    def remove_todo(self, content: str):
+        """删除待办（用于清理重复或已转为日程的待办）"""
+        self.storage.remove_todo(content)
+    
     def add_memory(self, topic: str, points: List[str]):
         """添加记忆（对话摘要）"""
         self.storage.add_conversation(topic, points)
@@ -742,6 +740,10 @@ class MemorySystem:
     def learn_habit(self, habit: str, category: str = "工作习惯"):
         """学习习惯"""
         self.storage.learn_habit(habit, category)
+    
+    def add_regular_schedule(self, title: str, time: str, frequency: str, description: str = ""):
+        """添加重复性日程"""
+        self.storage.add_regular_schedule(title, time, frequency, description)
     
     def increment_conversation_count(self):
         """增加对话计数"""

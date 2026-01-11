@@ -1,0 +1,189 @@
+{
+  "profile": {
+    "basic_info": {
+      "姓名": "猪嘎",
+      "昵称": "",
+      "时区": "Asia/Shanghai (UTC+8)",
+      "语言": "zh-CN"
+    },
+    "preferences": {
+      "提醒方式": {
+        "默认提醒方式": "推送通知",
+        "重要事项提醒": "邮件 + 推送",
+        "提醒提前时间": "15分钟"
+      },
+      "工作习惯": {
+        "工作日": "周一至周五",
+        "工作时间": "09:00 - 18:00"
+      },
+      "内容偏好": {
+        "喜欢的主题": "",
+        "回复风格": "简洁、专业"
+      }
+    }
+  },
+  "todos": {
+    "in_progress": [],
+    "pending": [
+      {
+        "content": "整理办公桌",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "回复三封未读邮件",
+        "priority": "medium",
+        "due_date": "2024-06-22",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "完成日报写作",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "学习30分钟新技能",
+        "priority": "low",
+        "due_date": "2024-06-24",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "与同事交流本周重点工作",
+        "priority": "medium",
+        "due_date": "2024-06-23",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "打印会议材料",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "制定明日工作计划",
+        "priority": "medium",
+        "due_date": "2024-06-22",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "整理本周已完成任务清单",
+        "priority": "low",
+        "due_date": "2024-06-25",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "预订下周差旅机票",
+        "priority": "medium",
+        "due_date": "2024-06-24",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "整理个人文件夹",
+        "priority": "low",
+        "due_date": "2024-06-26",
+        "created_at": "2026-01-11 02:56:14"
+      },
+      {
+        "content": "整理办公桌",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "回复三封未读邮件",
+        "priority": "medium",
+        "due_date": "2024-06-22",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "完成日报写作",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "打印会议材料",
+        "priority": "high",
+        "due_date": "2024-06-21",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "制定明日工作计划",
+        "priority": "medium",
+        "due_date": "2024-06-22",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "整理本周已完成任务清单",
+        "priority": "low",
+        "due_date": "2024-06-25",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "预订下周差旅机票",
+        "priority": "medium",
+        "due_date": "2024-06-24",
+        "created_at": "2026-01-11 02:57:35"
+      },
+      {
+        "content": "整理个人文件夹",
+        "priority": "low",
+        "due_date": "2024-06-26",
+        "created_at": "2026-01-11 02:57:35"
+      }
+    ],
+    "completed": []
+  },
+  "habits": {
+    "工作习惯": [],
+    "沟通习惯": [],
+    "生活习惯": []
+  },
+  "conversations": [
+    {
+      "date": "2026-01-11",
+      "topic": "日程建议",
+      "summary": [
+        "为“学习30分钟新技能”建议添加为每日或工作日重复日程；为“与同事交流本周重点工作”建议添加为每周例会。等待用户确认频率。"
+      ]
+    }
+  ],
+  "diary": [],
+  "schedule": {
+    "regular": [
+      {
+        "title": "完成日报写作",
+        "time": "17:30",
+        "frequency": "工作日",
+        "description": "下班前固定写作日报，每个工作日下午",
+        "created_at": "2026-01-11 03:14:50"
+      },
+      {
+        "title": "制定明日工作计划",
+        "time": "17:00",
+        "frequency": "工作日",
+        "description": "每天工作日临近下班前安排明日工作",
+        "created_at": "2026-01-11 03:14:50"
+      },
+      {
+        "title": "学习30分钟新技能",
+        "time": "10:00",
+        "frequency": "工作日",
+        "description": "每天上午10:00安排新技能学习，持续30分钟",
+        "created_at": "2026-01-11 03:15:29"
+      }
+    ],
+    "upcoming": []
+  },
+  "relationships": {
+    "contacts": [],
+    "important": []
+  },
+  "metadata": {
+    "created_at": "2026-01-10 01:47:56",
+    "last_updated": "2026-01-11 03:16:31",
+    "conversation_count": 22
+  }
+}

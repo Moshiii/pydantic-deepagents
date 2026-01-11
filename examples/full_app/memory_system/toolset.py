@@ -26,19 +26,23 @@ MEMORY_SYSTEM_PROMPT = """
 
 你可以使用以下工具来管理和查询用户的长期记忆：
 
-- `read_memory`: 读取用户的记忆信息（基本信息、偏好、待办等）
+- `read_memory`: 读取用户的记忆信息（基本信息、偏好、待办、日程等）
 - `update_preference`: 更新用户的偏好设置
-- `add_todo`: 添加待办事项到用户的记忆
+- `add_todo`: 添加待办事项到用户的记忆（一次性任务）
 - `complete_todo`: 标记待办事项为已完成
+- `remove_todo`: 删除待办事项（用于清理重复或已转为日程的待办）
 - `add_memory`: 记录重要的对话记忆
 - `learn_habit`: 学习用户的新习惯
+- `add_regular_schedule`: 添加重复性日程（每天、工作日、每周X等）
 
 使用建议：
 - 在对话开始时，使用 `read_memory` 了解用户的基本信息和偏好
 - 当用户提到偏好时，使用 `update_preference` 更新
-- 当用户提到任务时，使用 `add_todo` 记录
+- 当用户提到一次性任务时，使用 `add_todo` 记录
+- 当用户提到重复性任务时，使用 `add_regular_schedule` 添加到日程，并立即使用 `remove_todo` 从待办中删除
 - 在重要对话后，使用 `add_memory` 保存关键信息
 - 当发现用户的行为模式时，使用 `learn_habit` 学习
+- **自动清理**：当任务转为日程后，自动使用 `remove_todo` 清理待办中的重复项
 """
 
 
@@ -69,6 +73,8 @@ def get_memory_system_prompt(memory: Optional[MemoryData] = None) -> str:
         parts.append("\n## 当前待办")
         for todo in todos[:5]:
             parts.append(f"- {todo.get('content', '')}")
+    
+    # 注意：日程信息会通过 get_context() 方法动态获取，这里不重复添加
     
     return "\n".join(parts)
 
@@ -153,6 +159,7 @@ def create_memory_toolset(
                 - "habits": 学习到的习惯
                 - "memories": 重要记忆
                 - "goals": 长期目标
+                - "schedule": 日程安排（定期日程和即将到来的事件）
         """
         memory_sys = get_memory_system(ctx)
 
@@ -160,50 +167,123 @@ def create_memory_toolset(
         if section == "all":
             return memory_sys.get_context()
 
-        # 以下分支使用新的分类存储来读取对应文件
-        storage = memory_sys.storage  # CategorizedMemoryStorage
+        # 以下分支使用 JSON 存储来读取对应数据
+        storage = memory_sys.storage  # JsonMemoryStorage
+        data = storage.get_all_data()
 
         if section == "basic_info":
             # 直接从 profile.md 中提取“基本信息”表格
-            profile = storage.files["profile"].read_text(encoding="utf-8") if storage.files["profile"].exists() else ""
-            import re
-            match = re.search(r"## 基本信息\n\n(.*?)(?=\n## |$)", profile, re.DOTALL)
-            if match:
-                result = ["## 基本信息", match.group(1).strip()]
+            # 从 JSON 中提取基本信息
+            basic_info = data.get("profile", {}).get("basic_info", {})
+            if basic_info:
+                result = ["## 基本信息", ""]
+                result.append("| 字段 | 值 |")
+                result.append("|------|-----|")
+                for key, value in basic_info.items():
+                    result.append(f"| {key} | {value} |")
                 return "\n".join(result)
             return "暂无基本信息"
 
         if section == "preferences":
-            # 返回 profile.md 中的偏好设置部分
-            profile = storage.files["profile"].read_text(encoding="utf-8") if storage.files["profile"].exists() else ""
-            import re
-            match = re.search(r"## 偏好设置\n(.*?)(?=\n---|$)", profile, re.DOTALL)
-            if match:
-                result = ["## 偏好设置", match.group(1).strip()]
+            # 从 JSON 中提取偏好设置
+            preferences = data.get("profile", {}).get("preferences", {})
+            if preferences:
+                result = ["## 偏好设置", ""]
+                for category, items in preferences.items():
+                    result.append(f"### {category}")
+                    for key, value in items.items():
+                        result.append(f"- {key}：`{value}`")
+                    result.append("")
                 return "\n".join(result)
             return "暂无偏好设置"
 
         if section == "todos":
-            # 直接返回 todos.md 的内容
-            if storage.files["todos"].exists():
-                return storage.files["todos"].read_text(encoding="utf-8")
+            # 从 JSON 中提取待办事项
+            todos = data.get("todos", {})
+            if todos:
+                result = ["# 待办事项", ""]
+                status_map = {
+                    "in_progress": "进行中",
+                    "pending": "待开始",
+                    "completed": "已完成"
+                }
+                for status_key, status_name in status_map.items():
+                    todo_list = todos.get(status_key, [])
+                    if todo_list:
+                        result.append(f"### {status_name}")
+                        for todo in todo_list:
+                            priority_str = f"，优先级：{todo.get('priority', 'medium')}" if todo.get('priority') != 'medium' else ""
+                            due_str = f"，截止：{todo.get('due_date')}" if todo.get('due_date') else ""
+                            completed_str = f"，完成时间：{todo.get('completed_at')}" if todo.get('completed_at') else ""
+                            checkbox = "[x]" if status_key == "completed" else "[ ]"
+                            result.append(f"- {checkbox} {todo['content']}{priority_str}{due_str}{completed_str}")
+                        result.append("")
+                return "\n".join(result)
             return "暂无待办事项"
 
         if section == "habits":
-            if storage.files["habits"].exists():
-                return storage.files["habits"].read_text(encoding="utf-8")
+            # 从 JSON 中提取习惯
+            habits = data.get("habits", {})
+            if habits:
+                result = ["# 生活习惯", ""]
+                for category, habit_list in habits.items():
+                    if habit_list:
+                        result.append(f"## {category}")
+                        for habit_item in habit_list:
+                            learned_at = habit_item.get('learned_at', '')
+                            learned_str = f"（学习时间：{learned_at}）" if learned_at else ""
+                            result.append(f"- {habit_item['habit']}{learned_str}")
+                        result.append("")
+                return "\n".join(result)
             return "暂无学习到的习惯"
 
         if section == "memories":
-            if storage.files["conversations"].exists():
-                return storage.files["conversations"].read_text(encoding="utf-8")
+            # 从 JSON 中提取对话记忆
+            conversations = data.get("conversations", [])
+            if conversations:
+                result = ["# 最近对话摘要", ""]
+                for conv in conversations:
+                    result.append(f"### {conv.get('date', '')} - {conv.get('topic', '')}")
+                    for point in conv.get('summary', []):
+                        result.append(f"- {point}")
+                    result.append("")
+                return "\n".join(result)
             return "暂无重要记忆"
 
-        if section == "goals":
-            # 当前未单独实现 goals 文件，返回 profile 中可能的目标信息或占位
-            return "当前记忆系统未单独存储长期目标，如需请在 profile 或 diary 中记录。"
+        if section == "schedule":
+            # 从 JSON 中提取日程安排
+            schedule_data = data.get("schedule", {})
+            result = ["# 日程安排", ""]
+            
+            # 定期日程
+            regular = schedule_data.get("regular", [])
+            if regular:
+                result.append("## 定期日程")
+                for sched in regular:
+                    desc_str = f"（{sched['description']}）" if sched.get('description') else ""
+                    result.append(f"- **{sched['title']}**：{sched['time']}，{sched['frequency']}{desc_str}")
+                result.append("")
+            
+            # 即将到来的事件
+            upcoming = schedule_data.get("upcoming", [])
+            if upcoming:
+                result.append("## 即将到来的事件")
+                for event in upcoming:
+                    end_str = f"-{event['end_time']}" if event.get('end_time') else ""
+                    desc_str = f"（{event['description']}）" if event.get('description') else ""
+                    result.append(f"- **{event['title']}**：{event['start_time']}{end_str}{desc_str}")
+                result.append("")
+            
+            if not regular and not upcoming:
+                return "暂无日程安排"
+            
+            return "\n".join(result)
 
-        return f"未知的章节：{section}。可用章节：all, basic_info, preferences, todos, habits, memories, goals"
+        if section == "goals":
+            # 当前未单独实现 goals，返回提示
+            return "当前记忆系统未单独存储长期目标，如需请在 diary 中记录。"
+
+        return f"未知的章节：{section}。可用章节：all, basic_info, preferences, todos, habits, memories, goals, schedule"
     
     @toolset.tool
     async def update_preference(
@@ -256,6 +336,20 @@ def create_memory_toolset(
         return f"已标记完成：{content}"
     
     @toolset.tool
+    async def remove_todo(
+        ctx: RunContext[DepsType],
+        content: str
+    ) -> str:
+        """删除待办事项（用于清理重复或已转为日程的待办）
+        
+        Args:
+            content: 待办内容（需要与添加时完全匹配）
+        """
+        memory_sys = get_memory_system(ctx)
+        memory_sys.remove_todo(content)
+        return f"已删除待办：{content}"
+    
+    @toolset.tool
     async def add_memory(
         ctx: RunContext[DepsType],
         topic: str,
@@ -287,6 +381,30 @@ def create_memory_toolset(
         memory_sys = get_memory_system(ctx)
         memory_sys.learn_habit(habit, category)
         return f"已学习习惯：{habit}（类别：{category}）"
+    
+    @toolset.tool
+    async def add_regular_schedule(
+        ctx: RunContext[DepsType],
+        title: str,
+        time: str,
+        frequency: str,
+        description: str = ""
+    ) -> str:
+        """添加重复性日程到用户的日历
+        
+        Args:
+            title: 日程标题（如"学习30分钟新技能"）
+            time: 时间（格式：HH:MM，如 "10:00" 或 "14:30"）
+            frequency: 频率，可选值：
+                - "每天"：每天重复
+                - "工作日"：周一至周五重复
+                - "每周一"、"每周二"等：每周特定日期重复
+                - "每月1号"等：每月特定日期重复
+            description: 备注说明（可选）
+        """
+        memory_sys = get_memory_system(ctx)
+        memory_sys.add_regular_schedule(title, time, frequency, description)
+        return f"已添加重复性日程：{title}，时间：{time}，频率：{frequency}"
     
     return toolset
 
