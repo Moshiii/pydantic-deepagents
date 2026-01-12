@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 export function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');
@@ -37,101 +39,157 @@ export function getFileIconClass(filename) {
   return icons[ext] || 'ri-file-line';
 }
 
+// 配置 marked 选项
+marked.setOptions({
+  breaks: true, // 支持 GitHub 风格的换行
+  gfm: true, // 启用 GitHub Flavored Markdown
+  headerIds: false, // 禁用标题 ID
+  mangle: false, // 不混淆邮箱地址
+});
+
+// 自定义渲染器以添加 Tailwind CSS 类
+const renderer = new marked.Renderer();
+
+// 标题
+renderer.heading = (text, level) => {
+  const sizes = {
+    1: 'text-3xl font-bold mt-6 mb-4',
+    2: 'text-2xl font-semibold mt-6 mb-3',
+    3: 'text-xl font-semibold mt-6 mb-3',
+    4: 'text-lg font-semibold mt-4 mb-2',
+    5: 'text-base font-semibold mt-4 mb-2',
+    6: 'text-sm font-semibold mt-4 mb-2',
+  };
+  return `<h${level} class="${sizes[level] || 'text-base'} text-text-main">${text}</h${level}>`;
+};
+
+// 段落
+renderer.paragraph = (text) => {
+  return `<p class="my-2 text-text-main">${text}</p>`;
+};
+
+// 代码块
+renderer.code = (code, language) => {
+  const escapedCode = escapeHtml(code);
+  const lang = language || 'text';
+  return `<pre class="bg-gray-900 border border-border-subtle p-4 rounded-md overflow-x-auto my-4"><code class="language-${lang} font-mono text-sm">${escapedCode}</code></pre>`;
+};
+
+// 行内代码
+renderer.codespan = (code) => {
+  return `<code class="bg-white/10 px-1 py-0.5 rounded text-accent-primary font-mono text-sm">${escapeHtml(code)}</code>`;
+};
+
+// 链接
+renderer.link = (href, title, text) => {
+  return `<a href="${escapeHtml(href)}" class="text-accent-primary underline hover:text-white" target="_blank" rel="noopener noreferrer"${title ? ` title="${escapeHtml(title)}"` : ''}>${text}</a>`;
+};
+
+// 列表
+renderer.list = (body, ordered) => {
+  const tag = ordered ? 'ol' : 'ul';
+  const className = ordered 
+    ? 'my-3 space-y-1 list-decimal ml-6' 
+    : 'my-3 space-y-1 list-disc ml-6';
+  return `<${tag} class="${className}">${body}</${tag}>`;
+};
+
+renderer.listitem = (text) => {
+  return `<li class="my-1">${text}</li>`;
+};
+
+// 表格
+renderer.table = (header, body) => {
+  return `<div class="overflow-x-auto my-4"><table class="w-full border-collapse border border-border-subtle rounded-md overflow-hidden">${header}${body}</table></div>`;
+};
+
+renderer.tablerow = (content) => {
+  // 检查是否是表头行（通过检查是否包含 th 标签）
+  const isHeader = content.includes('<th');
+  const rowClass = isHeader 
+    ? 'bg-bg-element' 
+    : 'bg-bg-panel hover:bg-bg-hover';
+  return `<tr class="${rowClass}">${content}</tr>`;
+};
+
+renderer.tablecell = (content, flags) => {
+  const tag = flags.header ? 'th' : 'td';
+  const align = flags.align || 'left';
+  const headerClass = flags.header 
+    ? 'bg-bg-element font-semibold text-accent-primary border-b border-border-subtle' 
+    : 'text-text-main border-b border-border-subtle';
+  const cellClass = flags.header 
+    ? `px-4 py-2 ${headerClass}`
+    : `px-4 py-2 ${headerClass}`;
+  
+  return `<${tag} class="${cellClass}" style="text-align: ${align}">${content}</${tag}>`;
+};
+
+// 引用块
+renderer.blockquote = (quote) => {
+  return `<blockquote class="border-l-4 border-accent-primary pl-4 my-3 italic text-text-muted">${quote}</blockquote>`;
+};
+
+// 水平线
+renderer.hr = () => {
+  return '<hr class="my-4 border-border-subtle">';
+};
+
+// 粗体
+renderer.strong = (text) => {
+  return `<strong class="font-semibold text-white">${text}</strong>`;
+};
+
+// 斜体
+renderer.em = (text) => {
+  return `<em>${text}</em>`;
+};
+
+marked.use({ renderer });
+
 export function formatMessage(content) {
   if (!content) return '';
   
-  let html = content;
-  
-  // 1. 代码块（必须在其他处理之前）
-  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
-    const escapedCode = escapeHtml(code.trim());
-    return `<pre class="bg-gray-900 border border-border-subtle p-4 rounded-md overflow-x-auto my-4"><code class="language-${lang || 'text'} font-mono text-sm">${escapedCode}</code></pre>`;
-  });
-  
-  // 2. 行内代码（避免匹配代码块内的）
-  html = html.replace(/`([^`\n]+)`/g, '<code class="bg-white/10 px-1 py-0.5 rounded text-accent-primary font-mono text-sm">$1</code>');
-  
-  // 3. 表格
-  html = html.replace(/\|(.+)\|\n\|([-|:\s]+)\|\n((?:\|.+\|\n?)+)/g, (match, header, separator, rows) => {
-    const headers = header.split('|').map(h => h.trim()).filter(h => h);
-    const alignments = separator.split('|').map(s => {
-      const trimmed = s.trim();
-      if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'center';
-      if (trimmed.endsWith(':')) return 'right';
-      return 'left';
-    }).filter((_, i) => i > 0); // 跳过第一个空元素
+  try {
+    let processedContent = content.trim();
     
-    let tableHtml = '<table class="w-full border-collapse my-4 border border-border-subtle rounded-md overflow-hidden"><thead><tr class="bg-bg-element">';
-    headers.forEach((h, i) => {
-      const align = alignments[i] || 'left';
-      tableHtml += `<th class="px-4 py-2 text-left font-semibold text-accent-primary border-b border-border-subtle" style="text-align: ${align}">${escapeHtml(h)}</th>`;
-    });
-    tableHtml += '</tr></thead><tbody>';
+    // 检查内容是否被包裹在代码块中（``` 标记）
+    // 如果整个内容是一个代码块，且看起来像 Markdown（包含表格、标题等），则提取出来解析
+    const codeBlockRegex = /^```[\w]*\n?([\s\S]*?)```$/m;
+    const codeBlockMatch = processedContent.match(codeBlockRegex);
     
-    const rowLines = rows.trim().split('\n');
-    rowLines.forEach((row, rowIdx) => {
-      if (!row.trim()) return;
-      const cells = row.split('|').map(c => c.trim()).filter((c, i) => i > 0 && i <= headers.length);
-      tableHtml += `<tr class="${rowIdx % 2 === 0 ? 'bg-bg-panel' : 'bg-bg-element'} hover:bg-bg-hover">`;
-      cells.forEach((cell, i) => {
-        const align = alignments[i] || 'left';
-        tableHtml += `<td class="px-4 py-2 border-b border-border-subtle text-text-main" style="text-align: ${align}">${escapeHtml(cell)}</td>`;
-      });
-      tableHtml += '</tr>';
+    if (codeBlockMatch) {
+      const codeContent = codeBlockMatch[1].trim();
+      // 检查是否包含 Markdown 特征（表格、标题、列表等）
+      const hasMarkdownFeatures = 
+        codeContent.includes('|') || // 表格
+        codeContent.match(/^#+\s/m) || // 标题
+        codeContent.match(/^[\*\-\+]\s/m) || // 无序列表
+        codeContent.match(/^\d+\.\s/m); // 有序列表
+      
+      if (hasMarkdownFeatures) {
+        // 如果包含 Markdown 特征，当作 Markdown 解析而不是代码块
+        processedContent = codeContent;
+      }
+    }
+    
+    // 使用 marked 解析 Markdown
+    let html = marked.parse(processedContent, {
+      breaks: true,
+      gfm: true,
+      headerIds: false,
+      mangle: false,
     });
     
-    tableHtml += '</tbody></table>';
-    return tableHtml;
-  });
-  
-  // 4. 标题
-  html = html.replace(/^### (.*$)/gm, '<h3 class="text-xl font-semibold mt-6 mb-3 text-text-main">$1</h3>');
-  html = html.replace(/^## (.*$)/gm, '<h2 class="text-2xl font-semibold mt-6 mb-3 text-text-main">$1</h2>');
-  html = html.replace(/^# (.*$)/gm, '<h1 class="text-3xl font-bold mt-6 mb-4 text-text-main">$1</h1>');
-  
-  // 5. 无序列表
-  html = html.replace(/^[\*\-\+] (.+)$/gm, '<li class="ml-6 list-disc">$1</li>');
-  html = html.replace(/(<li class="ml-6 list-disc">.*<\/li>\n?)+/g, (match) => {
-    return `<ul class="my-3 space-y-1">${match}</ul>`;
-  });
-  
-  // 6. 有序列表
-  html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-6 list-decimal">$1</li>');
-  html = html.replace(/(<li class="ml-6 list-decimal">.*<\/li>\n?)+/g, (match) => {
-    return `<ol class="my-3 space-y-1">${match}</ol>`;
-  });
-  
-  // 7. 粗体和斜体
-  html = html.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  
-  // 8. 链接
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-accent-primary underline hover:text-white" target="_blank" rel="noopener noreferrer">$1</a>');
-  
-  // 9. 水平线
-  html = html.replace(/^---$/gm, '<hr class="my-4 border-border-subtle">');
-  
-  // 10. 引用块
-  html = html.replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-accent-primary pl-4 my-3 italic text-text-muted">$1</blockquote>');
-  
-  // 11. 换行（保留段落结构）
-  // 先处理双换行（段落分隔）
-  html = html.replace(/\n\n+/g, '</p><p class="my-2">');
-  // 然后处理单换行
-  html = html.replace(/\n/g, '<br>');
-  
-  // 12. 包装在段落中（如果还没有）
-  if (!html.startsWith('<')) {
-    html = '<p class="my-2">' + html + '</p>';
-  } else if (!html.startsWith('<p')) {
-    html = '<p class="my-2">' + html + '</p>';
+    // 文件路径链接（在最后处理）
+    html = linkifyFilePaths(html);
+    
+    return html;
+  } catch (error) {
+    console.error('Error parsing markdown:', error);
+    // 如果解析失败，返回转义后的原始内容
+    return `<p class="my-2">${escapeHtml(content)}</p>`;
   }
-  
-  // 13. 文件路径链接（在最后处理，避免被其他规则影响）
-  html = linkifyFilePaths(html);
-  
-  return html;
 }
 
 export function linkifyFilePaths(html, onFileClick) {
