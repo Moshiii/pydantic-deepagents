@@ -1,7 +1,7 @@
 {
   "profile": {
     "basic_info": {
-      "姓名": "猪嘎",
+      "姓名": "",
       "昵称": "",
       "时区": "Asia/Shanghai (UTC+8)",
       "语言": "zh-CN"
@@ -29,356 +29,33 @@
     }
   },
   "todos": {
+    "pending": [],
+    "scheduled": [],
     "in_progress": [],
-    "pending": [
-      {
-        "content": "完成日报写作",
-        "priority": "high",
-        "due_date": "2024-06-21",
-        "created_at": "2026-01-11 02:56:14",
-        "id": "todo_20260111_221404_7057",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:56:14"
-      },
-      {
-        "content": "制定明日工作计划",
-        "priority": "medium",
-        "due_date": "2024-06-22",
-        "created_at": "2026-01-11 02:56:14",
-        "id": "todo_20260111_221404_8460",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:56:14"
-      },
-      {
-        "content": "整理办公桌",
-        "priority": "high",
-        "due_date": "2024-06-21",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_5152",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "回复三封未读邮件",
-        "priority": "medium",
-        "due_date": "2024-06-22",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_4616",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "完成日报写作",
-        "priority": "high",
-        "due_date": "2024-06-21",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_9786",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "打印会议材料",
-        "priority": "high",
-        "due_date": "2024-06-21",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_9520",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "制定明日工作计划",
-        "priority": "medium",
-        "due_date": "2024-06-22",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_6525",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "整理本周已完成任务清单",
-        "priority": "low",
-        "due_date": "2024-06-25",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_7621",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "预订下周差旅机票",
-        "priority": "medium",
-        "due_date": "2024-06-24",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_7561",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      },
-      {
-        "content": "整理个人文件夹",
-        "priority": "low",
-        "due_date": "2024-06-26",
-        "created_at": "2026-01-11 02:57:35",
-        "id": "todo_20260111_221404_5913",
-        "category": null,
-        "estimated_duration": null,
-        "scheduled_time": null,
-        "reminder_minutes": 15,
-        "updated_at": "2026-01-11 02:57:35"
-      }
-    ],
-    "completed": [],
-    "scheduled": []
+    "completed": []
   },
   "habits": {
     "工作习惯": [],
     "沟通习惯": [],
     "生活习惯": []
   },
-  "conversations": [
-    {
-      "date": "2026-01-11",
-      "topic": "日程建议",
-      "summary": [
-        "为“学习30分钟新技能”建议添加为每日或工作日重复日程；为“与同事交流本周重点工作”建议添加为每周例会。等待用户确认频率。"
-      ]
-    }
-  ],
+  "conversations": [],
   "diary": [],
   "schedule": {
-    "regular": [
-      {
-        "title": "完成日报写作",
-        "time": "17:30",
-        "frequency": "工作日",
-        "description": "下班前固定写作日报，每个工作日下午",
-        "created_at": "2026-01-11 03:14:50",
-        "id": "recurring_20260111_221404_3334",
-        "duration": "1小时",
-        "end_date": null,
-        "reminder_minutes": 15
-      },
-      {
-        "title": "制定明日工作计划",
-        "time": "17:00",
-        "frequency": "工作日",
-        "description": "每天工作日临近下班前安排明日工作",
-        "created_at": "2026-01-11 03:14:50",
-        "id": "recurring_20260111_221404_1279",
-        "duration": "1小时",
-        "end_date": null,
-        "reminder_minutes": 15
-      },
-      {
-        "title": "学习30分钟新技能",
-        "time": "10:00",
-        "frequency": "工作日",
-        "description": "每天上午10:00安排新技能学习，持续30分钟",
-        "created_at": "2026-01-11 03:15:29",
-        "id": "recurring_20260111_221404_1698",
-        "duration": "1小时",
-        "end_date": null,
-        "reminder_minutes": 15
-      },
-      {
-        "id": "recurring_20260112_020743_9283",
-        "title": "学习30分钟新技能",
-        "time": "10:00",
-        "duration": "30分钟",
-        "frequency": "工作日",
-        "description": "每天上午学习新技能",
-        "end_date": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T02:07:43.324115"
-      }
-    ],
-    "upcoming": [
-      {
-        "id": "event_20260112_180337_4468",
-        "title": "整理办公桌",
-        "start_time": "2024-06-20 09:00",
-        "end_time": "2024-06-20T09:30:00",
-        "duration": "30分钟",
-        "description": "高优先级，需本周内完成",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.683164"
-      },
-      {
-        "id": "event_20260112_180337_3916",
-        "title": "回复三封未读邮件",
-        "start_time": "2024-06-20 09:45",
-        "end_time": "2024-06-20T10:15:00",
-        "duration": "30分钟",
-        "description": "建议上午先快速处理完，高优先级邮件",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.688161"
-      },
-      {
-        "id": "event_20260112_180337_5578",
-        "title": "与同事交流本周重点工作",
-        "start_time": "2024-06-20 11:00",
-        "end_time": "2024-06-20T11:30:00",
-        "duration": "30分钟",
-        "description": "需本周完成，建议上午沟通",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.689336"
-      },
-      {
-        "id": "event_20260112_180337_5669",
-        "title": "打印会议材料",
-        "start_time": "2024-06-20 15:30",
-        "end_time": "2024-06-20T16:00:00",
-        "duration": "30分钟",
-        "description": "高优先级，需要下班前打印好",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.690368"
-      },
-      {
-        "id": "event_20260112_180337_5002",
-        "title": "整理本周已完成任务清单",
-        "start_time": "2024-06-21 14:30",
-        "end_time": "2024-06-21T15:00:00",
-        "duration": "30分钟",
-        "description": "低优先级，可以周五下午整理",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.692196"
-      },
-      {
-        "id": "event_20260112_180337_7939",
-        "title": "预订下周差旅机票",
-        "start_time": "2024-06-21 15:15",
-        "end_time": "2024-06-21T15:45:00",
-        "duration": "30分钟",
-        "description": "建议提前预订，避免临时加价",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.695143"
-      },
-      {
-        "id": "event_20260112_180337_5664",
-        "title": "整理个人文件夹",
-        "start_time": "2024-06-21 16:00",
-        "end_time": "2024-06-21T16:30:00",
-        "duration": "30分钟",
-        "description": "低优先级，周五下午腾出时间整理",
-        "location": null,
-        "reminder_minutes": 15,
-        "created_at": "2026-01-12T18:03:37.699365"
-      }
-    ]
+    "regular": [],
+    "upcoming": []
   },
   "relationships": {
     "contacts": [],
     "important": []
   },
-  "metadata": {
-    "created_at": "2026-01-10 01:47:56",
-    "last_updated": "2026-01-12T18:04:17.160088",
-    "conversation_count": 48,
-    "version": "2.0"
-  },
-  "reminders": [
-    {
-      "id": "reminder_20260112_180337_3668",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_4468",
-      "remind_at": "2024-06-20T08:45:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.686776"
-    },
-    {
-      "id": "reminder_20260112_180337_8727",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_3916",
-      "remind_at": "2024-06-20T09:30:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.688202"
-    },
-    {
-      "id": "reminder_20260112_180337_4200",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_5578",
-      "remind_at": "2024-06-20T10:45:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.689373"
-    },
-    {
-      "id": "reminder_20260112_180337_6272",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_5669",
-      "remind_at": "2024-06-20T15:15:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.690404"
-    },
-    {
-      "id": "reminder_20260112_180337_3825",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_5002",
-      "remind_at": "2024-06-21T14:15:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.692258"
-    },
-    {
-      "id": "reminder_20260112_180337_1577",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_7939",
-      "remind_at": "2024-06-21T15:00:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.695376"
-    },
-    {
-      "id": "reminder_20260112_180337_7179",
-      "type": "schedule",
-      "target_id": "event_20260112_180337_5664",
-      "remind_at": "2024-06-21T15:45:00",
-      "reminded": false,
-      "reminder_minutes": 15,
-      "content": null,
-      "created_at": "2026-01-12T18:03:37.699441"
-    }
-  ],
+  "reminders": [],
   "followups": [],
-  "ideas": []
+  "ideas": [],
+  "metadata": {
+    "created_at": "2026-01-12T20:59:43.793482",
+    "last_updated": "2026-01-12T21:00:10.467314",
+    "conversation_count": 2,
+    "version": "2.0"
+  }
 }

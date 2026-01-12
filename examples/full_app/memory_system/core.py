@@ -24,16 +24,13 @@ class MemorySystem:
     def __init__(
         self,
         user_id: str,
-        memory_dir: str | Path = "./memories",
-        template_path: Optional[str | Path] = None
+        memory_dir: str | Path = "./memories"
     ):
         self.user_id = user_id
         self.memory_dir = Path(memory_dir)
         
         # 使用 JSON 存储
         self.storage = JsonMemoryStorage(user_id=user_id, memory_dir=memory_dir)
-        
-        # template_path 参数保留用于兼容，但不再使用
     
     def get_context(self, sections: Optional[List[str]] = None) -> str:
         """获取记忆上下文（用于注入系统提示）
@@ -196,7 +193,7 @@ class MemorySystem:
         """标记询问已询问"""
         self.storage.mark_followup_asked(followup_id)
     
-    # ========== 其他操作（保持兼容）==========
+    # ========== 其他操作 ==========
     
     def add_memory(self, topic: str, points: List[str]):
         """添加记忆（对话摘要）"""
@@ -211,11 +208,12 @@ class MemorySystem:
         title: str,
         time: str,
         frequency: str,
-        description: str = ""
+        description: str = "",
+        duration: str = "1小时"
     ) -> str:
-        """添加重复性日程（兼容旧API）"""
+        """添加重复性日程"""
         return self.storage.add_recurring_schedule(
-            title, time, "1小时", frequency, description
+            title, time, duration, frequency, description
         )
     
     def increment_conversation_count(self):

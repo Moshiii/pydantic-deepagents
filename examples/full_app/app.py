@@ -36,8 +36,14 @@ from fastapi.staticfiles import StaticFiles
 # NOTE: memory_system is a local module under examples/full_app/memory_system
 # It is deliberately designed to be low-dependency and portable.
 try:
-    from memory_system import create_memory_toolset
     from memory_system.core import MemorySystem
+    # Import from the same directory
+    import sys
+    from pathlib import Path
+    app_dir = Path(__file__).parent
+    if str(app_dir) not in sys.path:
+        sys.path.insert(0, str(app_dir))
+    from personal_assistant_toolset import create_personal_assistant_toolset
     MEMORY_SYSTEM_AVAILABLE = True
 except ImportError:  # pragma: no cover - dev-time warning only
     MEMORY_SYSTEM_AVAILABLE = False
@@ -89,7 +95,6 @@ WORKSPACE_DIR = APP_DIR / "workspace"
 SKILLS_DIR = APP_DIR / "skills"
 STATIC_DIR = APP_DIR / "static"
 MEMORY_DIR = APP_DIR / "memories"
-MEMORY_TEMPLATE = APP_DIR / "memory_template.md"
 
 # Personal Companion AI: Fixed user ID (not session-based)
 # All memories are stored for this single user identity
@@ -98,6 +103,96 @@ PERSONAL_USER_ID = "owner"
 # Create workspace if it doesn't exist
 WORKSPACE_DIR.mkdir(exist_ok=True)
 MEMORY_DIR.mkdir(exist_ok=True)
+
+
+def ensure_memories_directory():
+    """确保 memories 目录存在，如果不存在则重建并初始化空模板（按模块拆分为多个文件）"""
+    from datetime import datetime
+    
+    # 确保 memories 目录存在
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 确保默认用户目录存在
+    default_user_dir = MEMORY_DIR / PERSONAL_USER_ID
+    default_user_dir.mkdir(parents=True, exist_ok=True)
+    
+    now = datetime.now().isoformat()
+    
+    # 定义文件映射：文件名 -> 默认数据
+    file_templates = {
+        "profile.json": {
+            "basic_info": {
+                "姓名": "",
+                "昵称": "",
+                "时区": "Asia/Shanghai (UTC+8)",
+                "语言": "zh-CN"
+            },
+            "preferences": {
+                "提醒方式": {
+                    "默认提醒方式": "推送通知",
+                    "重要事项提醒": "邮件 + 推送",
+                    "提醒提前时间": "15分钟"
+                },
+                "工作习惯": {
+                    "工作日": "周一至周五",
+                    "工作时间": "09:00 - 18:00"
+                },
+                "内容偏好": {
+                    "喜欢的主题": "",
+                    "回复风格": "简洁、专业"
+                },
+                "日程偏好": {},
+                "询问偏好": {
+                    "任务完成询问": "after_task_time",
+                    "进度检查频率": "weekly",
+                    "最小询问间隔小时数": 4
+                }
+            }
+        },
+        "todos.json": {
+            "pending": [],
+            "scheduled": [],
+            "in_progress": [],
+            "completed": []
+        },
+        "schedule.json": {
+            "regular": [],
+            "upcoming": []
+        },
+        "ideas.json": [],
+        "habits.json": {
+            "工作习惯": [],
+            "沟通习惯": [],
+            "生活习惯": []
+        },
+        "conversations.json": [],
+        "reminders.json": [],
+        "followups.json": [],
+        "relationships.json": {
+            "contacts": [],
+            "important": []
+        },
+        "diary.json": [],
+        "metadata.json": {
+            "version": "3.0",
+            "created_at": now,
+            "last_updated": now,
+            "conversation_count": 0,
+            "file_structure": "split"
+        }
+    }
+    
+    # 检查并初始化每个文件
+    created_files = []
+    for filename, default_data in file_templates.items():
+        file_path = default_user_dir / filename
+        if not file_path.exists():
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(default_data, f, ensure_ascii=False, indent=2)
+            created_files.append(filename)
+    
+    if created_files:
+        logger.info(f"✓ 已重建 memories 目录并初始化空模板文件: {', '.join(created_files)}")
 
 
 @dataclass
@@ -219,29 +314,52 @@ When you encounter an error:
 3. Retry the operation
 4. Continue with the task
 
-## Memory System
+## Personal Assistant Toolset
 
-You have access to a long-term memory system that persists across conversations:
+You have access to a comprehensive personal assistant toolset that includes:
 
-- **read_memory(section)**: Read user's memory (basic_info, preferences, todos, habits, memories, goals, schedule)
+**Memory & Profile**:
+- **read_memory(section)**: Read user's memory (profile, todos, schedule, ideas, habits)
 - **update_preference(category, key, value)**: Update user preferences
-- **add_todo(content, priority, due_date)**: Add a todo item (for one-time tasks)
-- **complete_todo(content)**: Mark a todo as completed
-- **add_memory(topic, summary)**: Record important conversation memories
-- **learn_habit(habit, category)**: Learn user habits (工作习惯, 沟通习惯, 生活习惯)
-- **add_regular_schedule(title, time, frequency, description)**: Add recurring schedule (daily, weekdays, weekly, monthly)
 
-**CRITICAL - Memory Usage:**
-- **ALWAYS** start conversations by reading the user's basic_info to get their name
+**Personalization**:
+- **learn_user_pattern(pattern_type, pattern_description, confidence, source)**: Learn user patterns (使用习惯, 聊天习惯, 办事习惯, 语言偏好)
+- **get_learned_patterns(pattern_type)**: Get learned patterns
+
+**Idea Management**:
+- **add_idea(content, category, tags)**: Record creative ideas
+- **get_daily_ideas(date)**: Get daily ideas
+- **search_ideas(query, category)**: Search ideas
+
+**Todo Management**:
+- **add_todo(content, priority, due_date, category, estimated_duration)**: Add a todo item
+- **complete_todo(todo_id)**: Mark a todo as completed
+- **remove_todo(todo_id)**: Remove a todo
+- **auto_migrate_overdue_todos()**: Auto-migrate overdue todos to tomorrow
+- **create_todo_reminder(todo_id, reminder_minutes)**: Create a reminder for a todo
+- **create_todo_followup(todo_id, followup_type)**: Create a follow-up question for a todo
+- **get_pending_reminders()**: Get pending reminders
+- **get_pending_followups()**: Get pending follow-ups
+
+**Schedule Management**:
+- **add_one_time_event(title, start_time, end_time, duration, description, location, reminder_minutes)**: Add a one-time event
+- **add_regular_schedule(title, time, frequency, description, duration, reminder_minutes)**: Add recurring schedule
+- **assess_todo_urgency(todo_id)**: Assess todo urgency
+- **find_available_time_slot(duration_minutes, start_date, end_date)**: Find available time slots
+- **auto_schedule_todo(todo_id)**: Intelligently schedule a todo
+
+**CRITICAL - Personal Assistant Toolset Usage:**
+- **ALWAYS** start conversations by reading the user's profile to get their name using `read_memory(section="profile")`
 - Address the user by their name ONLY when greeting them or at the start of a conversation to acknowledge you remember them
 - After the greeting, communicate naturally without repeatedly mentioning their name
 - When user asks about their preferences, todos, or habits → use `read_memory`
-- When user expresses preferences or habits → use `update_preference` or `learn_habit`
+- When user expresses preferences or habits → use `update_preference` or `learn_user_pattern`
 - When user mentions one-time tasks → use `add_todo`
 - When user mentions recurring tasks → use `add_regular_schedule` to add to calendar, then **IMMEDIATELY** use `remove_todo` to remove it from todos
-- After important conversations → use `add_memory` to save key points
+- When user expresses creative ideas → use `add_idea` to record them
 - **ALWAYS** personalize responses based on remembered information
 - **AUTOMATIC CLEANUP**: When converting a task from todo to schedule, automatically remove the todo using `remove_todo`
+- **AUTO-MIGRATE**: Periodically use `auto_migrate_overdue_todos()` to move overdue todos to tomorrow
 - If you don't know the user's name yet, ask them: "请问我应该怎么称呼您？" and then use `update_preference("基本信息", "姓名", "他们的名字")` to save it
 
 ## Schedule Management - BE PROACTIVE AND DECISIVE
@@ -296,7 +414,7 @@ When user says "你帮我安排今天的日程吧" or "你给我排期" or simil
 - **AUTOMATICALLY** identify which tasks are recurring vs one-time
 - **AUTOMATICALLY** convert recurring tasks to schedules using `add_regular_schedule`
 - **AUTOMATICALLY** remove converted todos using `remove_todo`
-- **AUTOMATICALLY** arrange remaining one-time tasks into a time schedule
+- **AUTOMATICALLY** arrange remaining one-time tasks using `auto_schedule_todo` for each todo
 - **DON'T ASK** - just do it and show the result
 
 ## Guidelines
@@ -325,20 +443,19 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
     # Create toolsets list
     toolsets = []
 
-    # Create the memory toolset if available
+    # Create the personal assistant toolset if available
     # Use fixed PERSONAL_USER_ID for personal companion AI (not session-based)
     if MEMORY_SYSTEM_AVAILABLE:
         try:
-            memory_toolset = create_memory_toolset(
+            personal_assistant_toolset = create_personal_assistant_toolset(
                 memory_dir=str(MEMORY_DIR),
-                template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None,
-                id="memory",
+                id="personal_assistant",
                 fixed_user_id=PERSONAL_USER_ID,  # Fixed user ID for personal companion
             )
-            toolsets.append(memory_toolset)
-            logger.info("Memory system toolset added to agent (user_id='owner')")
+            toolsets.append(personal_assistant_toolset)
+            logger.info("Personal assistant toolset added to agent (user_id='owner')")
         except Exception as e:  # pragma: no cover - defensive logging
-            logger.warning(f"Failed to create memory toolset: {e}")
+            logger.warning(f"Failed to create personal assistant toolset: {e}")
 
     # Create the main agent with all features
     # Include DeferredToolRequests as output type for human-in-the-loop
@@ -374,8 +491,7 @@ def create_agent() -> Agent[DeepAgentDeps, str]:
             try:
                 memory_sys = MemorySystem(
                     user_id=PERSONAL_USER_ID,
-                    memory_dir=str(MEMORY_DIR),
-                    template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None
+                    memory_dir=str(MEMORY_DIR)
                 )
                 
                 # Extract user name directly
@@ -454,6 +570,9 @@ async def get_or_create_session(session_id: str) -> UserSession:
 async def lifespan(app: FastAPI):
     """Initialize shared agent and session manager on startup."""
     global agent, session_manager, docker_available
+
+    # Ensure memories directory exists and is initialized
+    ensure_memories_directory()
 
     # Create shared agent (stateless)
     agent = create_agent()
@@ -741,8 +860,7 @@ async def run_agent_with_streaming(
         try:
             memory_sys = MemorySystem(
                 user_id=PERSONAL_USER_ID,  # Fixed user ID for personal companion
-                memory_dir=str(MEMORY_DIR),
-                template_path=str(MEMORY_TEMPLATE) if MEMORY_TEMPLATE.exists() else None
+                memory_dir=str(MEMORY_DIR)
             )
             memory_sys.increment_conversation_count()
             logger.debug("Updated memory statistics for owner")

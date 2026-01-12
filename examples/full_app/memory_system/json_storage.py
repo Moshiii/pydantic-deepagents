@@ -49,9 +49,6 @@ class JsonMemoryStorage:
         
         # 初始化 JSON 文件
         self._initialize_json()
-        
-        # 迁移旧数据（一次性）
-        self._migrate_old_data()
     
     def _initialize_json(self):
         """初始化 JSON 文件（如果不存在）"""
@@ -119,91 +116,6 @@ class JsonMemoryStorage:
                 }
             }
             self._write_json(default_data)
-    
-    def _migrate_old_data(self):
-        """迁移旧数据格式（一次性）"""
-        data = self._read_json(use_cache=False)
-        
-        # 检查是否已经迁移过
-        if data.get("metadata", {}).get("version") == "2.0":
-            return
-        
-        # 为todos添加ID和缺失字段
-        for status in ["pending", "in_progress", "completed"]:
-            for todo in data["todos"].get(status, []):
-                if "id" not in todo:
-                    todo["id"] = generate_id("todo")
-                if "category" not in todo:
-                    todo["category"] = None
-                if "estimated_duration" not in todo:
-                    todo["estimated_duration"] = None
-                if "scheduled_time" not in todo:
-                    todo["scheduled_time"] = None
-                if "reminder_minutes" not in todo:
-                    todo["reminder_minutes"] = 15
-                if "updated_at" not in todo:
-                    todo["updated_at"] = todo.get("created_at")
-        
-        # 添加scheduled状态
-        if "scheduled" not in data["todos"]:
-            data["todos"]["scheduled"] = []
-        
-        # 为schedule添加ID和扩展字段
-        for event in data["schedule"].get("regular", []):
-            if "id" not in event:
-                event["id"] = generate_id("recurring")
-            if "duration" not in event:
-                event["duration"] = "1小时"
-            if "end_date" not in event:
-                event["end_date"] = None
-            if "reminder_minutes" not in event:
-                event["reminder_minutes"] = 15
-        
-        for event in data["schedule"].get("upcoming", []):
-            if "id" not in event:
-                event["id"] = generate_id("event")
-            if "duration" not in event:
-                if event.get("end_time"):
-                    # 计算duration
-                    try:
-                        start = parse_datetime(event["start_time"])
-                        end = parse_datetime(event["end_time"])
-                        duration_minutes = int((end - start).total_seconds() / 60)
-                        from .utils import format_duration
-                        event["duration"] = format_duration(duration_minutes)
-                    except:
-                        event["duration"] = "1小时"
-                else:
-                    event["duration"] = "1小时"
-            if "location" not in event:
-                event["location"] = None
-            if "reminder_minutes" not in event:
-                event["reminder_minutes"] = 15
-        
-        # 添加新字段
-        if "reminders" not in data:
-            data["reminders"] = []
-        if "followups" not in data:
-            data["followups"] = []
-        if "ideas" not in data:
-            data["ideas"] = []
-        
-        # 扩展preferences
-        if "日程偏好" not in data["profile"]["preferences"]:
-            data["profile"]["preferences"]["日程偏好"] = {}
-        if "询问偏好" not in data["profile"]["preferences"]:
-            data["profile"]["preferences"]["询问偏好"] = {
-                "任务完成询问": "after_task_time",
-                "进度检查频率": "weekly",
-                "最小询问间隔小时数": 4
-            }
-        
-        # 更新版本号
-        if "metadata" not in data:
-            data["metadata"] = {}
-        data["metadata"]["version"] = "2.0"
-        
-        self._write_json(data, invalidate_cache=True)
     
     def _read_json(self, use_cache: bool = True) -> Dict[str, Any]:
         """读取 JSON 文件（带缓存）"""
@@ -829,7 +741,7 @@ class JsonMemoryStorage:
                 self._write_json(data)
                 return
     
-    # ========== 其他操作（保持兼容）==========
+    # ========== 其他操作 ==========
     
     def add_diary_entry(self, title: str, content: str):
         """添加日记条目"""
